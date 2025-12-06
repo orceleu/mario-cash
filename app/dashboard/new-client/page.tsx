@@ -82,7 +82,7 @@ export default function page() {
       });
       setMoney(0);
       setDisableEnd(true);
-      router.back();
+      router.push("/dashboard");
     } catch (error) {
       console.error("Erreur Firestore:", error);
       alert("Erreur lors de l’ajout");

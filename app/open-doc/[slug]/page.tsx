@@ -3,7 +3,7 @@ import React, { useEffect, useRef, useState } from "react";
 import Image from "next/image";
 import logo from "@/public/cash.png";
 import { doc, getDoc, updateDoc } from "firebase/firestore";
-import { db } from "@/app/firebase/config";
+import { auth, db } from "@/app/firebase/config";
 
 import {
   Dialog,
@@ -26,6 +26,8 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import LockerTable from "@/app/clientComponent/table";
 import { PASS_DELETE } from "@/app/dashboard/page";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { LoaderIcon } from "lucide-react";
+import { onAuthStateChanged, User } from "firebase/auth";
 
 interface FormData {
   id: string;
@@ -59,6 +61,7 @@ export default function PDFGenerator({
   const [openRemove, setOpenRemove] = useState(false);
   const [passDelete, setPassDelete] = useState("");
   const [passDeleteOk, setPassDeleteOk] = useState(false);
+  const [user, setUser] = useState<User | null>(null);
 
   const stringRef = useRef<string>(""); // initialisé vide
   useEffect(() => {
@@ -194,9 +197,19 @@ export default function PDFGenerator({
 
     fetchForm();
   }, []);
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
+      setUser(currentUser);
+    });
+    return () => unsubscribe();
+  }, []);
 
   if (!form) {
-    return <div className="p-4 text-red-500">Données introuvables.</div>;
+    return (
+      <div className="p-4 flex justify-center mt-40">
+        <LoaderIcon className="animate-spin" />
+      </div>
+    );
   }
 
   return (
@@ -207,8 +220,8 @@ export default function PDFGenerator({
           <Image src={logo} alt="logo" className="w-16 h-16 object-contain" />
 
           <div className="flex-1 text-center">
-            <p className="text-2xl font-bold mb-2">Mario Cash</p>
-            <ol className="text-gray-600">
+            <p className="text-xl md:text-2xl font-bold mb-2">Mario Cash</p>
+            <ol className="text-[10px] md:text-[15px] text-gray-600">
               <li>1- Le carnet est obligatoire pour toute transaction.</li>
               <li>
                 2- En cas de perte du carnet un frais doit etre versé pour le
@@ -451,9 +464,11 @@ export default function PDFGenerator({
           transactions
         </p>
         <p className="text-gray-700 text-center my-4">
-          NB: Les retraits ne sont pas prise en compte pour les jours payés. (pa
-          gen fè back)
+          NB: 1-Les retraits ne sont pas prise en compte pour les jours payés.
+          (pa gen fè back). 2- Veuillez actualiser la page pour afficher les
+          donnees recentes.
         </p>
+        <div className="h-1 bg-gray-700"></div>
         <ScrollArea className="w-full h-[600px]">
           <div className="my-10 w-full">
             <LockerTable plan={Number(form.Plan)} data={form.Historic} />

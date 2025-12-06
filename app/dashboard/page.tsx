@@ -13,7 +13,7 @@ import { onAuthStateChanged, signOut, User } from "firebase/auth";
 import { collection, deleteDoc, doc, getDocs } from "firebase/firestore";
 import { LogOut, PlusIcon, Trash2 } from "lucide-react";
 import { useRouter } from "next/navigation";
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useState } from "react";
 import { auth, db } from "../firebase/config";
 import Image from "next/image";
 import logo from "@/public/cash.png";
@@ -37,7 +37,8 @@ interface Documents {
 }
 
 type DocumentsWithId = Documents & { id: string };
-export const PASS_DELETE = "mario123";
+export const PASS_DELETE = "mario4321=";
+
 export default function Dashboard() {
   const [user, setUser] = useState<User | null>(null);
   const [doc1, setDoc] = useState<DocumentsWithId[]>([]);
@@ -49,42 +50,68 @@ export default function Dashboard() {
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
   const [exactDate, setExactDate] = useState("");
+  // new filters
+  const [filterDailyMoney, setFilterDailyMoney] = useState("");
+  const [filterPlanDays, setFilterPlanDays] = useState("");
+  const [show, setshow] = useState(false);
   useEffect(() => {
-    if (passDelete === PASS_DELETE) {
-      setPassDeleteOk(true);
-    } else {
-      setPassDeleteOk(false);
-    }
+    setPassDeleteOk(passDelete === PASS_DELETE);
   }, [passDelete]);
+
   // delete popup
   const [selectedDoc, setSelectedDoc] = useState<DocumentsWithId | null>(null);
   const [openConfirmPopup, setOpenConfirmPopup] = useState(false);
 
   const router = useRouter();
+
+  // FILTERS
+
   const filteredData = doc1.filter((data) => {
+    const docDate = data.StartDate.split(" ")[0];
+
     const nameMatch = data.Nom.toLowerCase().includes(
       searchQuery.toLowerCase()
     );
 
-    // extract YYYY-MM-DD part
-    const docDate = data.StartDate.split(" ")[0];
-
     let exactMatch = true;
     let rangeMatch = true;
 
-    if (exactDate) {
-      exactMatch = docDate === exactDate;
-    }
+    // exact date
+    if (exactDate) exactMatch = docDate === exactDate;
 
-    if (startDate) {
-      rangeMatch = docDate >= startDate;
-    }
-    if (endDate) {
-      rangeMatch = rangeMatch && docDate <= endDate;
-    }
+    // range
+    if (startDate) rangeMatch = docDate >= startDate;
+    if (endDate) rangeMatch = rangeMatch && docDate <= endDate;
 
-    return nameMatch && exactMatch && rangeMatch;
+    // NEW: carte
+    const cardMatch =
+      filterDailyMoney === "" ||
+      Number(data.DailyMoney) === Number(filterDailyMoney);
+
+    // NEW: nombre de jours
+    const planMatch =
+      filterPlanDays === "" || Number(data.Plan) === Number(filterPlanDays);
+
+    return nameMatch && exactMatch && rangeMatch && cardMatch && planMatch;
   });
+
+  // 🔥 TRI AUTO : documents récents en haut
+  filteredData.sort((a, b) => {
+    const dateA = new Date(a.StartDate);
+    const dateB = new Date(b.StartDate);
+    return dateB.getTime() - dateA.getTime();
+  });
+
+  // 🔥 Total global
+  const totalBalanceSum = filteredData.reduce(
+    (acc, item) => acc + Number(item.Balance),
+    0
+  );
+
+  const totalExpectedSum = filteredData.reduce(
+    (acc, item) => acc + Number(item.TotalBalance),
+    0
+  );
 
   const deleteDocument = async (collectionName: string, docId: string) => {
     try {
@@ -109,9 +136,10 @@ export default function Dashboard() {
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
       setUser(currentUser);
-
       if (currentUser?.email) {
         getCustomerdata();
+      } else {
+        router.replace("/");
       }
     });
     return () => unsubscribe();
@@ -125,9 +153,16 @@ export default function Dashboard() {
   return (
     <>
       {/* Header */}
-      <div className="flex justify-between items-center p-4  bg-slate-100 w-full fixed top-0 border-b z-50">
-        <Image src={logo} alt="logo" className="w-7 h-7" />
-        <p className="text-xl text-gray-700 font-bold ">MARIO CASH.</p>
+      <div className="flex justify-between items-center p-4 bg-slate-100 w-full fixed top-0 border-b z-50">
+        <div className="flex items-center gap-3">
+          <Image src={logo} alt="logo" className="w-7 h-7" />
+
+          <div className="hidden md:flex">
+            <p className="text-gray-600">{user?.email}</p>
+          </div>
+        </div>
+
+        <p className="text-xl text-gray-700 font-bold">MARIO CASH.</p>
         <div className="flex items-center gap-3">
           <Button
             variant="outline"
@@ -144,55 +179,92 @@ export default function Dashboard() {
       </div>
 
       {/* Main */}
-      <div className="pt-32 px-4 w-full max-w-4xl mx-auto">
-        {/* Search Bar */}
-        <div className="flex justify-center mb-10">
-          <Input
-            className="max-w-[450px]"
-            placeholder="Recherche par nom"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-          />
-        </div>
-
+      <div className="pt-[75px] px-4 w-full max-w-4xl mx-auto">
         {/* Date Filters */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-5">
-          {/* Start Date */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-5 bg-gray-50 rounded-3xl p-3 md:p-10">
+          {/* Search Bar */}
           <div className="flex flex-col">
-            <label className="mb-1 text-sm font-medium">de</label>
+            <label className="mb-1 text-sm font-medium">
+              Recherche par nom.
+            </label>
+            <Input
+              className="max-w-[450px]"
+              placeholder="Recherche par nom"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+            />
+          </div>
+          <div className="flex flex-col">
+            <label className="mb-1 text-sm font-medium">Debut.</label>
             <Input
               type="date"
               value={startDate}
               onChange={(e) => setStartDate(e.target.value)}
             />
           </div>
-
-          {/* End Date */}
           <div className="flex flex-col">
-            <label className="mb-1 text-sm font-medium">a</label>
+            <label className="mb-1 text-sm font-medium">Fin.</label>
             <Input
               type="date"
               value={endDate}
               onChange={(e) => setEndDate(e.target.value)}
             />
           </div>
+          {/* Carte (DailyMoney) */}
+          <div className="flex flex-col">
+            <label className="mb-1 text-sm font-medium">carte ($)</label>
+            <Input
+              type="number"
+              placeholder="Ex : 100"
+              value={filterDailyMoney}
+              onChange={(e) => setFilterDailyMoney(e.target.value)}
+            />
+          </div>
+          {/* Nombre de jours (Plan) */}
+          <div className="flex flex-col">
+            <label className="mb-1 text-sm font-medium">nombre de jour</label>
+            <Input
+              type="number"
+              placeholder="Ex : 200"
+              value={filterPlanDays}
+              onChange={(e) => setFilterPlanDays(e.target.value)}
+            />
+          </div>{" "}
+          {/* Reset dates */}
+          <Button
+            variant="outline"
+            className="mt-6"
+            onClick={() => {
+              setExactDate("");
+              setStartDate("");
+              setEndDate("");
+            }}
+          >
+            reinitialiser
+          </Button>
         </div>
 
-        {/* Reset dates */}
-        <Button
-          variant="outline"
-          className="mb-10"
-          onClick={() => {
-            setExactDate("");
-            setStartDate("");
-            setEndDate("");
-          }}
-        >
-          reinitialiser
-        </Button>
+        <div className=" flex justify-center my-5">
+          {" "}
+          <Button
+            onClick={() => {
+              setshow(!show);
+            }}
+          >
+            Voir les calculs
+          </Button>
+        </div>
+
+        {show && (
+          <div className="mb-10 p-4 border rounded-lg shadow bg-white">
+            <p className="text-lg font-bold text-gray-700">Total Global :</p>
+            <p className="text-gray-700 text-md">
+              {totalBalanceSum}$ht / {totalExpectedSum}$ht
+            </p>
+          </div>
+        )}
 
         {/* Document List */}
-
         <ul className="space-y-4 mb-10">
           {filteredData.map((data) => (
             <li
@@ -211,7 +283,8 @@ export default function Dashboard() {
                 <p className="font-bold text-lg">
                   {data.Nom} {data.Prenom}
                 </p>
-                <div className=" space-y-2">
+
+                <div className="space-y-2">
                   <div className="flex items-center justify-between text-sm text-gray-600">
                     <p>
                       <span className="font-bold text-gray-600">Début :</span>
@@ -238,12 +311,13 @@ export default function Dashboard() {
                     </p>
                   </div>
                 </div>
+
                 <p className="text-gray-600 text-sm">Ajouté:</p>
                 <p className="text-gray-600 text-sm">
                   {data.Balance}$ht/{data.TotalBalance}$ht
                 </p>
 
-                <div className="flex items-center gap-3 ">
+                <div className="flex items-center gap-3">
                   <Progress
                     value={getNumericProgress(data.Balance, data.TotalBalance)}
                     className="flex-1"
@@ -253,12 +327,14 @@ export default function Dashboard() {
                   </p>
                 </div>
               </div>
+
               <p>
-                <span className="text-gray-700 font-bold ">Carte de :</span>{" "}
+                <span className="text-gray-700 font-bold">Carte de :</span>{" "}
                 {data.DailyMoney}$ht
                 <span className="text-gray-700 font-bold mx-2">Durant :</span>
                 {data.Plan} Jour
               </p>
+
               <Button
                 variant="destructive"
                 className="mt-3 sm:mt-0 sm:ml-4 flex items-center gap-2"
@@ -291,9 +367,7 @@ export default function Dashboard() {
               <Input
                 type="password"
                 value={passDelete}
-                onChange={(e) => {
-                  setPassDelete(e.target.value);
-                }}
+                onChange={(e) => setPassDelete(e.target.value)}
                 className="my-3"
               />
               {passDeleteOk ? (
@@ -322,9 +396,7 @@ export default function Dashboard() {
               variant="destructive"
               disabled={!passDeleteOk}
               onClick={() => {
-                if (selectedDoc) {
-                  deleteDocument("doc", selectedDoc.id);
-                }
+                if (selectedDoc) deleteDocument("doc", selectedDoc.id);
                 setOpenConfirmPopup(false);
                 setPassDeleteOk(false);
                 setPassDelete("");
