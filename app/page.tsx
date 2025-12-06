@@ -5,14 +5,13 @@ import { auth } from "./firebase/config";
 import { useRouter } from "next/navigation";
 import {
   signInWithEmailAndPassword,
-  createUserWithEmailAndPassword,
   onAuthStateChanged,
   User,
 } from "firebase/auth";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { LoaderIcon } from "lucide-react";
-import logo from "@/public//globe.svg";
+import logo from "@/public/cash.png";
 
 import Image from "next/image";
 export default function Auth() {

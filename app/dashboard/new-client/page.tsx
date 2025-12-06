@@ -1,10 +1,11 @@
 "use client";
 import { db } from "@/app/firebase/config";
-import { addDaysToNow } from "@/app/function/function";
+import { addDaysToNow, generateData } from "@/app/function/function";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { addDoc, collection } from "firebase/firestore";
+import { useRouter } from "next/navigation";
 import React, { useEffect, useState } from "react";
 
 export const PLAN1 = 100;
@@ -14,6 +15,7 @@ export const PLAN3 = 300;
 export default function page() {
   const [disableEnd, setDisableEnd] = useState(true);
   const [money, setMoney] = useState(0);
+  const router = useRouter();
   const [form, setForm] = useState({
     Nom: "",
     Prenom: "",
@@ -80,6 +82,7 @@ export default function page() {
       });
       setMoney(0);
       setDisableEnd(true);
+      router.back();
     } catch (error) {
       console.error("Erreur Firestore:", error);
       alert("Erreur lors de l’ajout");
@@ -129,7 +132,7 @@ export default function page() {
               </TabsTrigger>
             </TabsList>
           </Tabs>
-          <p className="text-gray-700 font-bold mx-3">= {money} Gds</p>
+          <p className="text-gray-700 font-bold mx-3">= {money} $ht</p>
         </div>
 
         <form
@@ -150,7 +153,7 @@ export default function page() {
                     handleChange("DailyMoney", e.target.value);
                     //handleChange("Balance", e.target.value);
                   }}
-                  placeholder="Montant"
+                  placeholder="Montant ($ht)"
                   required
                 />
               </div>
@@ -162,8 +165,16 @@ export default function page() {
                   value={form.Balance}
                   onChange={(e) => {
                     handleChange("Balance", e.target.value);
+                    handleChange(
+                      "Historic",
+                      generateData(
+                        Number(e.target.value),
+                        Number(form.DailyMoney),
+                        "dep"
+                      )
+                    );
                   }}
-                  placeholder="Montant initial"
+                  placeholder="Montant initial ($ht)"
                   required
                 />
               </div>

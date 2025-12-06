@@ -1,7 +1,7 @@
 "use client";
 import React, { useEffect, useRef, useState } from "react";
 import Image from "next/image";
-import logo from "@/public/globe.svg";
+import logo from "@/public/cash.png";
 import { doc, getDoc, updateDoc } from "firebase/firestore";
 import { db } from "@/app/firebase/config";
 
@@ -19,9 +19,13 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
   formatReadableDate,
+  generateData,
   getLocalISOWithoutSeconds,
 } from "@/app/function/function";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import LockerTable from "@/app/clientComponent/table";
+import { PASS_DELETE } from "@/app/dashboard/page";
+import { ScrollArea } from "@/components/ui/scroll-area";
 
 interface FormData {
   id: string;
@@ -47,12 +51,31 @@ export default function PDFGenerator({
   const [form, setForm] = useState<FormData | null>(null);
   const docKey = useRef("");
   const [amount, setAmount] = useState("");
-  const [open, setOpen] = useState(false);
+  const [test, setest] = useState("");
   const [loadingAdd, setLoadingAdd] = useState(false);
   const [loadingRemove, setLoadingRemove] = useState(false);
   const [errorLimit, setErrorLimit] = useState("");
   const [openAdd, setOpenAdd] = useState(false);
   const [openRemove, setOpenRemove] = useState(false);
+  const [passDelete, setPassDelete] = useState("");
+  const [passDeleteOk, setPassDeleteOk] = useState(false);
+
+  const stringRef = useRef<string>(""); // initialisé vide
+  useEffect(() => {
+    if (passDelete === PASS_DELETE) {
+      setPassDeleteOk(true);
+    } else {
+      setPassDeleteOk(false);
+    }
+  }, [passDelete]);
+  const appendString = (initial: string, add: string) => {
+    if (!stringRef.current) {
+      stringRef.current = initial; // si vide, initialise avec initial
+    }
+    stringRef.current += add; // ajoute la nouvelle valeur
+    return stringRef.current;
+  };
+
   function validateAmount(value: string) {
     setAmount(value);
     setErrorLimit("");
@@ -80,16 +103,31 @@ export default function PDFGenerator({
 
   async function addFunds() {
     if (!form || errorLimit) return;
-
+    setPassDeleteOk(false);
+    setPassDelete("");
     setLoadingAdd(true);
     const newValue = Number(form.Balance) + Number(amount);
 
     try {
       const ref = doc(db, "doc", form.id);
-      await updateDoc(ref, { Balance: String(newValue) });
+      //actualise les deux propriete dans la base : historic et balance
+      await updateDoc(ref, {
+        Balance: String(newValue),
+        Historic: appendString(
+          form.Historic,
+          generateData(Number(amount), Number(form.DailyMoney), "dep")
+        ),
+      });
 
-      setForm((prev) => (prev ? { ...prev, Balance: String(newValue) } : prev));
-      alert(`Vous avez ajouté: ${amount} Gdes a votre balance!`);
+      setForm((prev) =>
+        prev
+          ? {
+              ...prev,
+              Balance: String(newValue),
+            }
+          : prev
+      );
+      alert(`Vous avez ajouté: ${amount} $ a votre balance!`);
       setAmount("");
       setOpenAdd(false);
     } catch (err) {
@@ -100,6 +138,8 @@ export default function PDFGenerator({
   }
   async function removeFunds() {
     if (!form || errorLimit) return;
+    setPassDeleteOk(false);
+    setPassDelete("");
     if (Number(form?.Balance ?? 0) - Number(amount) < 0) {
       setErrorLimit("Impossible de retirer plus que la balance actuelle.");
       alert("Impossible de retirer plus que la balance actuelle.");
@@ -109,14 +149,20 @@ export default function PDFGenerator({
 
       try {
         const ref = doc(db, "doc", form.id);
-        await updateDoc(ref, { Balance: String(newValue) });
+        await updateDoc(ref, {
+          Balance: String(newValue),
+          Historic: appendString(
+            form.Historic,
+            generateData(Number(amount), Number(form.DailyMoney), "retr")
+          ),
+        });
 
         setForm((prev) =>
           prev ? { ...prev, Balance: String(newValue) } : prev
         );
         setAmount("");
         setOpenRemove(false);
-        alert(`Vous avez retirer: ${amount} Gdes de votre balance!`);
+        alert(`Vous avez retirer: ${amount} $ de votre balance!`);
       } catch (err) {
         console.error("Erreur retrait fond:", err);
       } finally {
@@ -155,16 +201,6 @@ export default function PDFGenerator({
 
   return (
     <div className="p-4 max-w-4xl mx-auto">
-      {/* Header */}
-      <div className="flex justify-between items-center my-3">
-        <button
-          disabled={loading}
-          className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50"
-        >
-          {loading ? "Génération..." : "Télécharger le PDF"}
-        </button>
-      </div>
-
       {/* Bandeau d'entête */}
       <div className="w-full bg-slate-100 py-6 px-4">
         <div className="flex flex-wrap justify-between items-center gap-6">
@@ -192,8 +228,8 @@ export default function PDFGenerator({
 
       {/* Section informations */}
       <div className="bg-gray-50 p-6 mt-8 rounded-lg border">
-        <h2 className="text-lg font-bold mb-4 text-blue-600">
-          Informations du client
+        <h2 className="text-lg font-bold mb-4 text-gray-700 text-center">
+          Informations client & compte
         </h2>
         <div className="bg-gray-50 p-6 mt-8 rounded-lg border">
           <div className="grid grid-cols-2 md:grid-cols-3 gap-4 text-sm text-gray-800">
@@ -215,8 +251,8 @@ export default function PDFGenerator({
             <p>
               <strong>Plan :</strong> {form.Plan} Jours
             </p>
-            <p>
-              <strong>Montant quotidien :</strong> {form.DailyMoney} Gourdes
+            <p className="text-green-600">
+              <strong>Montant quotidien :</strong> {form.DailyMoney} $ht
             </p>
             <p>
               <strong>NIF / CIN :</strong> {form.NIF}
@@ -226,150 +262,203 @@ export default function PDFGenerator({
               <strong>Téléphone :</strong> {form.Phone}
             </p>
             <p>
-              <strong>Total :</strong> {form.TotalBalance} Gourdes
+              <strong>Total :</strong> {form.TotalBalance} $ht
             </p>
             <p>
-              <strong>Balance :</strong> {form.Balance} Gourdes
-            </p>
-
-            <p className="col-span-2 md:col-span-3">
-              <strong>Historique :</strong> {form.Historic}
+              <strong>Balance :</strong> {form.Balance} $ht
             </p>
           </div>
         </div>
-        <div className="bg-white p-4 rounded-lg border mt-6 space-y-4">
-          <p className="text-lg font-semibold">
-            Balance actuelle : {form.Balance} G / {form.TotalBalance} G
+        <div className="bg-white p-4 rounded-lg border  mt-6 space-y-4">
+          <p className="text-lg font-semibold text-center">
+            Balance actuelle : {form.Balance} $ht / {form.TotalBalance} $ht
           </p>
-
-          <div>
-            {/* INPUT */}
-            <Input
-              placeholder="Montant"
-              value={amount}
-              onChange={(e) => validateAmount(e.target.value)}
-              type="number"
-              className="w-40 my-2"
-            />
-            <Tabs defaultValue="100jours">
-              <TabsList>
-                <TabsTrigger
-                  value="100jours"
-                  onClick={() => {
-                    validateAmount("250");
-                  }}
-                >
-                  250G
-                </TabsTrigger>
-                <TabsTrigger
-                  value="200jours"
-                  onClick={() => {
-                    validateAmount("500");
-                  }}
-                >
-                  500G
-                </TabsTrigger>
-                <TabsTrigger
-                  value="300jours"
-                  onClick={() => {
-                    validateAmount("750");
-                  }}
-                >
-                  750G
-                </TabsTrigger>
-                <TabsTrigger
-                  value="400jours"
-                  onClick={() => {
-                    validateAmount("1000");
-                  }}
-                >
-                  1000G
-                </TabsTrigger>
-                <TabsTrigger
-                  value="500jours"
-                  onClick={() => {
-                    validateAmount("1500");
-                  }}
-                >
-                  1500G
-                </TabsTrigger>
-              </TabsList>
-            </Tabs>
+          <div className="flex justify-center">
+            <div>
+              {/* INPUT */}
+              <Input
+                placeholder="Montant"
+                value={amount}
+                onChange={(e) => validateAmount(e.target.value)}
+                type="number"
+                className="w-40 my-2"
+              />
+              <Tabs defaultValue="100jours">
+                <TabsList>
+                  <TabsTrigger
+                    value="100jours"
+                    onClick={() => {
+                      validateAmount("50");
+                    }}
+                  >
+                    50 $ht
+                  </TabsTrigger>
+                  <TabsTrigger
+                    value="200jours"
+                    onClick={() => {
+                      validateAmount("100");
+                    }}
+                  >
+                    100 $ht
+                  </TabsTrigger>
+                  <TabsTrigger
+                    value="300jours"
+                    onClick={() => {
+                      validateAmount("150");
+                    }}
+                  >
+                    150 $ht
+                  </TabsTrigger>
+                  <TabsTrigger
+                    value="400jours"
+                    onClick={() => {
+                      validateAmount("200");
+                    }}
+                  >
+                    200 $ht
+                  </TabsTrigger>
+                  <TabsTrigger
+                    value="500jours"
+                    onClick={() => {
+                      validateAmount("300");
+                    }}
+                  >
+                    300 $ht
+                  </TabsTrigger>
+                </TabsList>
+              </Tabs>
+            </div>
           </div>
 
-          {errorLimit && <p className="text-red-600 text-sm">{errorLimit}</p>}
-
-          <div className="flex items-center gap-3 mt-3">
-            {/* AJOUT */}
-            <Dialog open={openAdd} onOpenChange={setOpenAdd}>
-              <DialogTrigger asChild>
-                <Button disabled={!amount || !!errorLimit}>
-                  Ajouter des fonds
-                </Button>
-              </DialogTrigger>
-
-              <DialogContent>
-                <DialogHeader>
-                  <DialogTitle>Confirmer l'ajout</DialogTitle>
-                  <DialogDescription>
-                    Voulez-vous ajouter <strong>{amount}</strong> à la balance ?
-                  </DialogDescription>
-                </DialogHeader>
-
-                <DialogFooter>
-                  <Button variant="secondary" onClick={() => setOpenAdd(false)}>
-                    Annuler
-                  </Button>
-
+          {errorLimit && (
+            <p className="text-red-600 text-sm text-center">{errorLimit}</p>
+          )}
+          <div className="flex justify-center">
+            <div className="flex items-center gap-3 mt-3">
+              {/* AJOUT */}
+              <Dialog open={openAdd} onOpenChange={setOpenAdd}>
+                <DialogTrigger asChild>
                   <Button
-                    onClick={addFunds}
-                    disabled={loadingAdd || !!errorLimit}
+                    className="bg-green-600 hover:bg-green-500"
+                    disabled={!amount || !!errorLimit}
                   >
-                    {loadingAdd ? "Chargement..." : "Confirmer"}
+                    Ajouter des fonds
                   </Button>
-                </DialogFooter>
-              </DialogContent>
-            </Dialog>
+                </DialogTrigger>
 
-            {/* RETRAIT */}
-            <Dialog open={openRemove} onOpenChange={setOpenRemove}>
-              <DialogTrigger asChild>
-                <Button
-                  variant="destructive"
-                  disabled={!amount || !!errorLimit}
-                >
-                  Retirer des fonds
-                </Button>
-              </DialogTrigger>
+                <DialogContent>
+                  <DialogHeader>
+                    <DialogTitle>Confirmer l'ajout</DialogTitle>
+                    <DialogDescription>
+                      Voulez-vous ajouter <strong>{amount}$ht</strong> à la
+                      balance ? Entrer votre mot de passe!
+                      <Input
+                        type="password"
+                        value={passDelete}
+                        onChange={(e) => {
+                          setPassDelete(e.target.value);
+                        }}
+                        className="my-3"
+                      />
+                      {passDeleteOk ? (
+                        <span className="text-green-500">autorisé</span>
+                      ) : (
+                        <span className="text-red-500">non authorisé</span>
+                      )}
+                    </DialogDescription>
+                  </DialogHeader>
 
-              <DialogContent>
-                <DialogHeader>
-                  <DialogTitle>Confirmer le retrait</DialogTitle>
-                  <DialogDescription>
-                    Voulez-vous retirer <strong>{amount}</strong> de la balance
-                    ?
-                  </DialogDescription>
-                </DialogHeader>
+                  <DialogFooter>
+                    <Button
+                      variant="secondary"
+                      onClick={() => {
+                        setOpenAdd(false);
+                        setPassDeleteOk(false);
+                        setPassDelete("");
+                      }}
+                    >
+                      Annuler
+                    </Button>
 
-                <DialogFooter>
+                    <Button
+                      onClick={addFunds}
+                      disabled={loadingAdd || !!errorLimit || !passDeleteOk}
+                    >
+                      {loadingAdd ? "Chargement..." : "Confirmer"}
+                    </Button>
+                  </DialogFooter>
+                </DialogContent>
+              </Dialog>
+
+              {/* RETRAIT */}
+              <Dialog open={openRemove} onOpenChange={setOpenRemove}>
+                <DialogTrigger asChild>
                   <Button
-                    variant="secondary"
-                    onClick={() => setOpenRemove(false)}
+                    variant="destructive"
+                    disabled={!amount || !!errorLimit}
                   >
-                    Annuler
+                    Retirer des fonds
                   </Button>
+                </DialogTrigger>
 
-                  <Button
-                    onClick={removeFunds}
-                    disabled={loadingRemove || !!errorLimit}
-                  >
-                    {loadingRemove ? "Chargement..." : "Confirmer"}
-                  </Button>
-                </DialogFooter>
-              </DialogContent>
-            </Dialog>
+                <DialogContent>
+                  <DialogHeader>
+                    <DialogTitle>Confirmer le retrait</DialogTitle>
+                    <DialogDescription>
+                      Voulez-vous retirer <strong>{amount}$ht</strong> de la
+                      balance ?
+                      <Input
+                        type="password"
+                        value={passDelete}
+                        onChange={(e) => {
+                          setPassDelete(e.target.value);
+                        }}
+                        className="my-3"
+                      />
+                      {passDeleteOk ? (
+                        <span className="text-green-500">autorisé</span>
+                      ) : (
+                        <span className="text-red-500">non authorisé</span>
+                      )}
+                    </DialogDescription>
+                  </DialogHeader>
+
+                  <DialogFooter>
+                    <Button
+                      variant="secondary"
+                      onClick={() => {
+                        setOpenRemove(false);
+                        setPassDeleteOk(false);
+                        setPassDelete("");
+                      }}
+                    >
+                      Annuler
+                    </Button>
+
+                    <Button
+                      onClick={removeFunds}
+                      disabled={loadingRemove || !!errorLimit || !passDeleteOk}
+                    >
+                      {loadingRemove ? "Chargement..." : "Confirmer"}
+                    </Button>
+                  </DialogFooter>
+                </DialogContent>
+              </Dialog>
+            </div>
           </div>
         </div>
+        <p className="my-5 md:text-xl font-bold text-center text-gray-700 underline">
+          transactions
+        </p>
+        <p className="text-gray-700 text-center my-4">
+          NB: Les retraits ne sont pas prise en compte pour les jours payés. (pa
+          gen fè back)
+        </p>
+        <ScrollArea className="w-full h-[600px]">
+          <div className="my-10 w-full">
+            <LockerTable plan={Number(form.Plan)} data={form.Historic} />
+          </div>
+        </ScrollArea>
       </div>
     </div>
   );

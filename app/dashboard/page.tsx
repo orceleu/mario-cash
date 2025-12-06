@@ -11,18 +11,12 @@ import {
 } from "@/components/ui/dialog";
 import { onAuthStateChanged, signOut, User } from "firebase/auth";
 import { collection, deleteDoc, doc, getDocs } from "firebase/firestore";
-import {
-  CheckCheck,
-  CheckCircle,
-  LogOut,
-  PlusIcon,
-  Trash2,
-} from "lucide-react";
+import { LogOut, PlusIcon, Trash2 } from "lucide-react";
 import { useRouter } from "next/navigation";
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { auth, db } from "../firebase/config";
 import Image from "next/image";
-import logo from "@/public/globe.svg";
+import logo from "@/public/cash.png";
 import { Progress } from "@/components/ui/progress";
 import {
   formatReadableDate,
@@ -43,17 +37,25 @@ interface Documents {
 }
 
 type DocumentsWithId = Documents & { id: string };
-
+export const PASS_DELETE = "mario123";
 export default function Dashboard() {
   const [user, setUser] = useState<User | null>(null);
   const [doc1, setDoc] = useState<DocumentsWithId[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
+  const [passDelete, setPassDelete] = useState("");
+  const [passDeleteOk, setPassDeleteOk] = useState(false);
 
   // date filters
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
   const [exactDate, setExactDate] = useState("");
-
+  useEffect(() => {
+    if (passDelete === PASS_DELETE) {
+      setPassDeleteOk(true);
+    } else {
+      setPassDeleteOk(false);
+    }
+  }, [passDelete]);
   // delete popup
   const [selectedDoc, setSelectedDoc] = useState<DocumentsWithId | null>(null);
   const [openConfirmPopup, setOpenConfirmPopup] = useState(false);
@@ -125,7 +127,7 @@ export default function Dashboard() {
       {/* Header */}
       <div className="flex justify-between items-center p-4  bg-slate-100 w-full fixed top-0 border-b z-50">
         <Image src={logo} alt="logo" className="w-7 h-7" />
-
+        <p className="text-xl text-gray-700 font-bold ">MARIO CASH.</p>
         <div className="flex items-center gap-3">
           <Button
             variant="outline"
@@ -147,7 +149,7 @@ export default function Dashboard() {
         <div className="flex justify-center mb-10">
           <Input
             className="max-w-[450px]"
-            placeholder="Search by name..."
+            placeholder="Recherche par nom"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
           />
@@ -157,7 +159,7 @@ export default function Dashboard() {
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-5">
           {/* Start Date */}
           <div className="flex flex-col">
-            <label className="mb-1 text-sm font-medium">From</label>
+            <label className="mb-1 text-sm font-medium">de</label>
             <Input
               type="date"
               value={startDate}
@@ -167,7 +169,7 @@ export default function Dashboard() {
 
           {/* End Date */}
           <div className="flex flex-col">
-            <label className="mb-1 text-sm font-medium">To</label>
+            <label className="mb-1 text-sm font-medium">a</label>
             <Input
               type="date"
               value={endDate}
@@ -186,7 +188,7 @@ export default function Dashboard() {
             setEndDate("");
           }}
         >
-          Reset filters
+          reinitialiser
         </Button>
 
         {/* Document List */}
@@ -238,7 +240,7 @@ export default function Dashboard() {
                 </div>
                 <p className="text-gray-600 text-sm">Ajouté:</p>
                 <p className="text-gray-600 text-sm">
-                  {data.Balance}Gds/{data.TotalBalance}Gds
+                  {data.Balance}$ht/{data.TotalBalance}$ht
                 </p>
 
                 <div className="flex items-center gap-3 ">
@@ -253,7 +255,7 @@ export default function Dashboard() {
               </div>
               <p>
                 <span className="text-gray-700 font-bold ">Carte de :</span>{" "}
-                {data.DailyMoney}G
+                {data.DailyMoney}$ht
                 <span className="text-gray-700 font-bold mx-2">Durant :</span>
                 {data.Plan} Jour
               </p>
@@ -284,25 +286,48 @@ export default function Dashboard() {
                 {selectedDoc?.Nom} {selectedDoc?.Prenom}
               </span>
               ? <br />
-              Cette action est irréversible.
+              Cette action est irréversible. Entrer votre mot de passe pour
+              confirmer!
+              <Input
+                type="password"
+                value={passDelete}
+                onChange={(e) => {
+                  setPassDelete(e.target.value);
+                }}
+                className="my-3"
+              />
+              {passDeleteOk ? (
+                <span className="text-green-500">Suppression autorisé</span>
+              ) : (
+                <span className="text-red-500">
+                  Suppression non authorisé aux intrus! (li tap trò facile)
+                </span>
+              )}
             </DialogDescription>
           </DialogHeader>
 
           <DialogFooter>
             <Button
               variant="outline"
-              onClick={() => setOpenConfirmPopup(false)}
+              onClick={() => {
+                setOpenConfirmPopup(false);
+                setPassDeleteOk(false);
+                setPassDelete("");
+              }}
             >
               Non, Fermer
             </Button>
 
             <Button
               variant="destructive"
+              disabled={!passDeleteOk}
               onClick={() => {
                 if (selectedDoc) {
                   deleteDocument("doc", selectedDoc.id);
                 }
                 setOpenConfirmPopup(false);
+                setPassDeleteOk(false);
+                setPassDelete("");
               }}
             >
               Oui, Supprimer

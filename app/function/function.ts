@@ -70,3 +70,26 @@ export function getNumericProgress(
 
   return Math.round(percent);
 }
+export function generateData(
+  montant: number,
+  montantQuotidien: number,
+  action: "dep" | "retr"
+): string {
+  if (montantQuotidien <= 0) throw new Error("Le plan doit être supérieur à 0");
+
+  const now = new Date().toISOString();
+  const jours = montant / montantQuotidien;
+
+  return `${now},${montant},${jours},${action};`;
+}
+
+export function appendDataRepeated(
+  initialData: string,
+  dataToAdd: string
+): string {
+  // On s'assure que la nouvelle entrée a un point-virgule
+  const entry = dataToAdd.trim().endsWith(";") ? dataToAdd : dataToAdd + ";";
+
+  // Concatène simplement la nouvelle donnée à la chaîne existante
+  return initialData ? initialData + entry : entry;
+}
