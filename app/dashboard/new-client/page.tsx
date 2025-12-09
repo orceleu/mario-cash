@@ -11,6 +11,7 @@ import React, { useEffect, useState } from "react";
 export const PLAN1 = 100;
 export const PLAN2 = 200;
 export const PLAN3 = 300;
+export const PLAN4 = 365;
 
 export default function page() {
   const [disableEnd, setDisableEnd] = useState(true);
@@ -28,6 +29,7 @@ export default function page() {
     Balance: "",
     TotalBalance: "",
     Historic: "",
+    Detruit: "non",
   });
 
   const handleChange = (key: keyof typeof form, value: string | number) => {
@@ -65,7 +67,7 @@ export default function page() {
   const handleSubmit = async () => {
     try {
       await addDoc(collection(db, "doc"), form);
-      alert("Document ajouté avec succès");
+      alert("Client ajouté avec succès");
 
       setForm({
         Nom: "",
@@ -79,6 +81,7 @@ export default function page() {
         Balance: "",
         TotalBalance: "",
         Historic: "",
+        Detruit: "non",
       });
       setMoney(0);
       setDisableEnd(true);
@@ -129,6 +132,15 @@ export default function page() {
                 }}
               >
                 300 jours
+              </TabsTrigger>
+              <TabsTrigger
+                value="365jours"
+                onClick={() => {
+                  handleChange("EndDate", addDaysToNow(PLAN4.toString()));
+                  handleChange("Plan", PLAN4);
+                }}
+              >
+                365 jours
               </TabsTrigger>
             </TabsList>
           </Tabs>
@@ -250,7 +262,7 @@ export default function page() {
           </div>
 
           <div className="mt-6 text-center">
-            <Button type="submit" className="px-6 py-2">
+            <Button type="submit" className="px-6 py-2 w-full">
               Ajouter
             </Button>
           </div>

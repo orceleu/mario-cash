@@ -34,6 +34,7 @@ interface Documents {
   Balance: string;
   TotalBalance: string;
   Plan: string;
+  Detruit: string;
 }
 
 type DocumentsWithId = Documents & { id: string };
@@ -54,6 +55,7 @@ export default function Dashboard() {
   const [filterDailyMoney, setFilterDailyMoney] = useState("");
   const [filterPlanDays, setFilterPlanDays] = useState("");
   const [show, setshow] = useState(false);
+  const [percent, setPercent] = useState("1");
   useEffect(() => {
     setPassDeleteOk(passDelete === PASS_DELETE);
   }, [passDelete]);
@@ -238,6 +240,8 @@ export default function Dashboard() {
               setExactDate("");
               setStartDate("");
               setEndDate("");
+              setSearchQuery("");
+              setFilterPlanDays("");
             }}
           >
             reinitialiser
@@ -251,16 +255,38 @@ export default function Dashboard() {
               setshow(!show);
             }}
           >
-            Voir les calculs
+            {!show ? "Voir" : "Cacher"} les calculs
           </Button>
         </div>
 
         {show && (
           <div className="mb-10 p-4 border rounded-lg shadow bg-white">
-            <p className="text-lg font-bold text-gray-700">Total Global :</p>
-            <p className="text-gray-700 text-md">
-              {totalBalanceSum}$ht / {totalExpectedSum}$ht
-            </p>
+            <div className="flex justify-between">
+              <div>
+                <p className="text-lg font-bold text-gray-700">
+                  Total Global :
+                </p>
+                <p className="text-gray-700 text-md">
+                  {totalBalanceSum}$ht / {totalExpectedSum}$ht
+                </p>
+              </div>
+              <div>
+                <p className="text-center text-sm font-bold">%</p>
+                <Input
+                  type="number"
+                  value={percent}
+                  onChange={(e) => setPercent(e.target.value)}
+                  placeholder=" %"
+                />
+                <p className="text-center">
+                  {(Number(percent) * totalExpectedSum) / 100} $ht
+                </p>
+              </div>
+              {/* <p>
+                Detruit: <span className="font-bold">0</span>
+              </p>*/}
+              <p className="font-bold">{filteredData.length} Clients</p>
+            </div>
           </div>
         )}
 

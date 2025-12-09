@@ -294,7 +294,7 @@ export default function PDFGenerator({
                 value={amount}
                 onChange={(e) => validateAmount(e.target.value)}
                 type="number"
-                className="w-40 my-2"
+                className="w-full my-2"
               />
               <Tabs defaultValue="100jours">
                 <TabsList>
