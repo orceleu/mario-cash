@@ -71,7 +71,7 @@ export const PASS_DELETE = "mario4321=";
 export default function Dashboard() {
   const [user, setUser] = useState<User | null>(null);
   const [doc1, setDoc] = useState<DocumentsWithId[]>([]);
-  const [copy, setCopy] = useState<DocumentsWithId[]>([]);
+  // const [copy, setCopy] = useState<DocumentsWithId[]>([]);
 
   const [searchQuery, setSearchQuery] = useState("");
   const [passDelete, setPassDelete] = useState("");
@@ -1839,7 +1839,7 @@ export default function Dashboard() {
     })) as FormData[];
 
     setDoc(docs);
-    setCopy(copy);
+    //setCopy(copy);
     console.log(copy);
   };
 
