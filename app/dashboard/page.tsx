@@ -10,8 +10,20 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { onAuthStateChanged, signOut, User } from "firebase/auth";
-import { collection, deleteDoc, doc, getDocs } from "firebase/firestore";
-import { LogOut, PlusIcon, Trash2 } from "lucide-react";
+import {
+  collection,
+  deleteDoc,
+  doc,
+  getDocs,
+  updateDoc,
+} from "firebase/firestore";
+import {
+  DeleteIcon,
+  LogOut,
+  PlusIcon,
+  SidebarCloseIcon,
+  Trash2,
+} from "lucide-react";
 import { useRouter } from "next/navigation";
 import React, { useEffect, useState } from "react";
 import { auth, db } from "../firebase/config";
@@ -34,7 +46,7 @@ interface Documents {
   Balance: string;
   TotalBalance: string;
   Plan: string;
-  Detruit: string;
+  Detruit: string; // "oui" ou "non"
 }
 
 type DocumentsWithId = Documents & { id: string };
@@ -51,11 +63,12 @@ export default function Dashboard() {
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
   const [exactDate, setExactDate] = useState("");
-  // new filters
   const [filterDailyMoney, setFilterDailyMoney] = useState("");
   const [filterPlanDays, setFilterPlanDays] = useState("");
+
   const [show, setshow] = useState(false);
   const [percent, setPercent] = useState("1");
+
   useEffect(() => {
     setPassDeleteOk(passDelete === PASS_DELETE);
   }, [passDelete]);
@@ -63,11 +76,17 @@ export default function Dashboard() {
   // delete popup
   const [selectedDoc, setSelectedDoc] = useState<DocumentsWithId | null>(null);
   const [openConfirmPopup, setOpenConfirmPopup] = useState(false);
+  const [openConfirmPopupDestroy, setOpenConfirmPopupDestroy] = useState(false);
 
   const router = useRouter();
 
-  // FILTERS
+  // ❌ EXCLURE les détruits
+  const cleanedData = doc1.filter((d) => d.Detruit == "oui");
 
+  // récupération des détruits
+  const destroyedCount = doc1.filter((d) => d.Detruit === "oui").length;
+
+  // FILTERS
   const filteredData = doc1.filter((data) => {
     const docDate = data.StartDate.split(" ")[0];
 
@@ -78,33 +97,28 @@ export default function Dashboard() {
     let exactMatch = true;
     let rangeMatch = true;
 
-    // exact date
     if (exactDate) exactMatch = docDate === exactDate;
-
-    // range
     if (startDate) rangeMatch = docDate >= startDate;
     if (endDate) rangeMatch = rangeMatch && docDate <= endDate;
 
-    // NEW: carte
     const cardMatch =
       filterDailyMoney === "" ||
       Number(data.DailyMoney) === Number(filterDailyMoney);
 
-    // NEW: nombre de jours
     const planMatch =
       filterPlanDays === "" || Number(data.Plan) === Number(filterPlanDays);
 
     return nameMatch && exactMatch && rangeMatch && cardMatch && planMatch;
   });
 
-  // 🔥 TRI AUTO : documents récents en haut
+  // TRI DESC
   filteredData.sort((a, b) => {
     const dateA = new Date(a.StartDate);
     const dateB = new Date(b.StartDate);
     return dateB.getTime() - dateA.getTime();
   });
 
-  // 🔥 Total global
+  // TOTALS
   const totalBalanceSum = filteredData.reduce(
     (acc, item) => acc + Number(item.Balance),
     0
@@ -114,7 +128,11 @@ export default function Dashboard() {
     (acc, item) => acc + Number(item.TotalBalance),
     0
   );
-
+  const tri = doc1.filter((d) => d.Detruit == "oui");
+  const totaldetruit = tri.reduce(
+    (acc, item) => acc + Number(item.TotalBalance),
+    0
+  );
   const deleteDocument = async (collectionName: string, docId: string) => {
     try {
       const docRef = doc(db, collectionName, docId);
@@ -152,13 +170,37 @@ export default function Dashboard() {
     router.replace("/");
   };
 
+  async function termitatePlan(id: string, name: string) {
+    if (!doc1) return;
+    setPassDeleteOk(false);
+    setPassDelete("");
+    // setLoadingAdd(true);
+
+    try {
+      const ref = doc(db, "doc", id);
+      //actualise les deux propriete dans la base : historic et balance
+      await updateDoc(ref, {
+        Detruit: "oui",
+      });
+
+      alert(`Vous avez detruit le carnet de: ${name} !`);
+      window.location.reload();
+
+      // setAmount("");
+      //setOpenAdd(false);
+    } catch (err) {
+      console.error("Erreur ajout fund:", err);
+    } finally {
+      //setLoadingAdd(false);
+    }
+  }
+
   return (
     <>
       {/* Header */}
       <div className="flex justify-between items-center p-4 bg-slate-100 w-full fixed top-0 border-b z-50">
         <div className="flex items-center gap-3">
           <Image src={logo} alt="logo" className="w-7 h-7" />
-
           <div className="hidden md:flex">
             <p className="text-gray-600">{user?.email}</p>
           </div>
@@ -179,12 +221,14 @@ export default function Dashboard() {
           </Button>
         </div>
       </div>
-
       {/* Main */}
       <div className="pt-[75px] px-4 w-full max-w-4xl mx-auto">
-        {/* Date Filters */}
+        <p className="text-center my-2 text-gray-400 font-bold">
+          développé par ING Orcel Euler. No 47656226
+        </p>
+
+        {/* Filters */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-5 bg-gray-50 rounded-3xl p-3 md:p-10">
-          {/* Search Bar */}
           <div className="flex flex-col">
             <label className="mb-1 text-sm font-medium">
               Recherche par nom.
@@ -196,6 +240,7 @@ export default function Dashboard() {
               onChange={(e) => setSearchQuery(e.target.value)}
             />
           </div>
+
           <div className="flex flex-col">
             <label className="mb-1 text-sm font-medium">Debut.</label>
             <Input
@@ -204,6 +249,7 @@ export default function Dashboard() {
               onChange={(e) => setStartDate(e.target.value)}
             />
           </div>
+
           <div className="flex flex-col">
             <label className="mb-1 text-sm font-medium">Fin.</label>
             <Input
@@ -212,7 +258,7 @@ export default function Dashboard() {
               onChange={(e) => setEndDate(e.target.value)}
             />
           </div>
-          {/* Carte (DailyMoney) */}
+
           <div className="flex flex-col">
             <label className="mb-1 text-sm font-medium">carte ($)</label>
             <Input
@@ -222,7 +268,7 @@ export default function Dashboard() {
               onChange={(e) => setFilterDailyMoney(e.target.value)}
             />
           </div>
-          {/* Nombre de jours (Plan) */}
+
           <div className="flex flex-col">
             <label className="mb-1 text-sm font-medium">nombre de jour</label>
             <Input
@@ -231,8 +277,8 @@ export default function Dashboard() {
               value={filterPlanDays}
               onChange={(e) => setFilterPlanDays(e.target.value)}
             />
-          </div>{" "}
-          {/* Reset dates */}
+          </div>
+
           <Button
             variant="outline"
             className="mt-6"
@@ -242,19 +288,15 @@ export default function Dashboard() {
               setEndDate("");
               setSearchQuery("");
               setFilterPlanDays("");
+              setFilterDailyMoney("");
             }}
           >
             reinitialiser
           </Button>
         </div>
 
-        <div className=" flex justify-center my-5">
-          {" "}
-          <Button
-            onClick={() => {
-              setshow(!show);
-            }}
-          >
+        <div className="flex justify-center my-5">
+          <Button onClick={() => setshow(!show)}>
             {!show ? "Voir" : "Cacher"} les calculs
           </Button>
         </div>
@@ -270,57 +312,68 @@ export default function Dashboard() {
                   {totalBalanceSum}$ht / {totalExpectedSum}$ht
                 </p>
               </div>
+
               <div>
                 <p className="text-center text-sm font-bold">%</p>
                 <Input
                   type="number"
                   value={percent}
                   onChange={(e) => setPercent(e.target.value)}
-                  placeholder=" %"
+                  placeholder="%"
                 />
                 <p className="text-center">
                   {(Number(percent) * totalExpectedSum) / 100} $ht
                 </p>
               </div>
-              {/* <p>
-                Detruit: <span className="font-bold">0</span>
-              </p>*/}
+
+              <p className="font-bold text-green-500">
+                Détruits : {destroyedCount} : (
+                {(totaldetruit * Number(percent)) / 100} $ht)
+              </p>
+
               <p className="font-bold">{filteredData.length} Clients</p>
             </div>
           </div>
         )}
 
-        {/* Document List */}
+        {/* LISTE */}
         <ul className="space-y-4 mb-10">
           {filteredData.map((data) => (
             <li
               key={data.id}
-              className={`p-4 border rounded-lg shadow-sm ${
-                useProgress(data.StartDate, data.EndDate) >= 99 ||
-                getNumericProgress(data.Balance, data.TotalBalance) >= 99
+              className={`p-4 border rounded-lg shadow-sm transition flex flex-col sm:flex-row sm:items-center justify-between 
+              ${
+                data.Detruit === "oui"
+                  ? "bg-red-200 text-red-700 border-red-400"
+                  : useProgress(data.StartDate, data.EndDate) >= 99 ||
+                    getNumericProgress(data.Balance, data.TotalBalance) >= 99
                   ? "bg-green-400 text-white"
                   : "bg-white"
-              } hover:bg-slate-50 transition flex flex-col sm:flex-row sm:items-center justify-between`}
+              }
+            `}
             >
               <div
                 className="cursor-pointer"
                 onClick={() => router.push(`/open-doc/${data.id}`)}
               >
                 <p className="font-bold text-lg">
-                  {data.Nom} {data.Prenom}
+                  {data.Nom} {data.Prenom}{" "}
+                  {data.Detruit === "oui" && (
+                    <span className="text-red-700 font-bold">(Détruit)</span>
+                  )}
                 </p>
 
                 <div className="space-y-2">
                   <div className="flex items-center justify-between text-sm text-gray-600">
                     <p>
-                      <span className="font-bold text-gray-600">Début :</span>
+                      <span className="font-bold">Début :</span>
                       {formatReadableDate(
                         getLocalISOWithoutSeconds(data.StartDate)
                       )}
                     </p>
 
                     <p className="ml-3">
-                      <span className="font-bold text-gray-600">Fin :</span>
+                      <span className="font-bold">Fin :</span>
                       {formatReadableDate(
                         getLocalISOWithoutSeconds(data.EndDate)
                       )}
@@ -355,58 +408,74 @@ export default function Dashboard() {
               </div>
 
               <p>
-                <span className="text-gray-700 font-bold">Carte de :</span>{" "}
-                {data.DailyMoney}$ht
-                <span className="text-gray-700 font-bold mx-2">Durant :</span>
-                {data.Plan} Jour
+                <span className="font-bold">Carte :</span> {data.DailyMoney}$ht
+                <span className="font-bold mx-2">Durant :</span>
+                {data.Plan} jours
               </p>
-
-              <Button
-                variant="destructive"
-                className="mt-3 sm:mt-0 sm:ml-4 flex items-center gap-2"
-                onClick={() => {
-                  setSelectedDoc(data);
-                  setOpenConfirmPopup(true);
-                }}
-              >
-                <Trash2 className="size-4" />
-                Supprimer
-              </Button>
+              <div className=" grid-cols-1 gap-3">
+                <Button
+                  variant="destructive"
+                  className="mt-3 sm:mt-0 sm:ml-4 flex items-center gap-2"
+                  onClick={() => {
+                    setSelectedDoc(data);
+                    setOpenConfirmPopup(true);
+                  }}
+                >
+                  <Trash2 className="size-4" />
+                  Supprimer
+                </Button>
+                <Button
+                  variant="outline"
+                  className="mt-5 sm:mt-3 sm:ml-4 flex items-center gap-2"
+                  onClick={() => {
+                    setSelectedDoc(data);
+                    setOpenConfirmPopupDestroy(true);
+                    // termitatePlan(data.id, `${data.Nom} ${data.Prenom}`);
+                  }}
+                >
+                  <DeleteIcon className="size-4" />
+                  Detruire
+                </Button>
+              </div>
             </li>
           ))}
         </ul>
       </div>
-
-      {/* Confirmation Popup */}
+      {/* Confirmation Popup */}{" "}
       <Dialog open={openConfirmPopup} onOpenChange={setOpenConfirmPopup}>
+        {" "}
         <DialogContent>
+          {" "}
           <DialogHeader>
-            <DialogTitle>Confirmer la suppression</DialogTitle>
+            {" "}
+            <DialogTitle>Confirmer la suppression</DialogTitle>{" "}
             <DialogDescription>
+              {" "}
               Êtes-vous sûr de vouloir supprimer{" "}
               <span className="font-bold">
-                {selectedDoc?.Nom} {selectedDoc?.Prenom}
-              </span>
-              ? <br />
-              Cette action est irréversible. Entrer votre mot de passe pour
-              confirmer!
+                {" "}
+                {selectedDoc?.Nom} {selectedDoc?.Prenom}{" "}
+              </span>{" "}
+              ? <br /> Cette action est irréversible. Entrer votre mot de passe
+              pour confirmer!{" "}
               <Input
                 type="password"
                 value={passDelete}
                 onChange={(e) => setPassDelete(e.target.value)}
                 className="my-3"
-              />
+              />{" "}
               {passDeleteOk ? (
                 <span className="text-green-500">Suppression autorisé</span>
               ) : (
                 <span className="text-red-500">
-                  Suppression non authorisé aux intrus! (li tap trò facile)
+                  {" "}
+                  Suppression non authorisé aux intrus! (li tap trò facile){" "}
                 </span>
-              )}
-            </DialogDescription>
-          </DialogHeader>
-
+              )}{" "}
+            </DialogDescription>{" "}
+          </DialogHeader>{" "}
           <DialogFooter>
+            {" "}
             <Button
               variant="outline"
               onClick={() => {
@@ -415,9 +484,9 @@ export default function Dashboard() {
                 setPassDelete("");
               }}
             >
-              Non, Fermer
-            </Button>
-
+              {" "}
+              Non, Fermer{" "}
+            </Button>{" "}
             <Button
               variant="destructive"
               disabled={!passDeleteOk}
@@ -428,10 +497,79 @@ export default function Dashboard() {
                 setPassDelete("");
               }}
             >
-              Oui, Supprimer
-            </Button>
-          </DialogFooter>
-        </DialogContent>
+              {" "}
+              Oui, Supprimer{" "}
+            </Button>{" "}
+          </DialogFooter>{" "}
+        </DialogContent>{" "}
+      </Dialog>
+      <Dialog
+        open={openConfirmPopupDestroy}
+        onOpenChange={setOpenConfirmPopupDestroy}
+      >
+        {" "}
+        <DialogContent>
+          {" "}
+          <DialogHeader>
+            {" "}
+            <DialogTitle>Confirmer la Destruction</DialogTitle>{" "}
+            <DialogDescription>
+              {" "}
+              Êtes-vous sûr de vouloir Detruire le carnet{" "}
+              <span className="font-bold">
+                {" "}
+                {selectedDoc?.Nom} {selectedDoc?.Prenom}{" "}
+              </span>{" "}
+              ? <br /> Cette action est irréversible. Entrer votre mot de passe
+              pour confirmer!{" "}
+              <Input
+                type="password"
+                value={passDelete}
+                onChange={(e) => setPassDelete(e.target.value)}
+                className="my-3"
+              />{" "}
+              {passDeleteOk ? (
+                <span className="text-green-500">Destruction autorisé</span>
+              ) : (
+                <span className="text-red-500">
+                  {" "}
+                  Destruction non authorisé aux intrus! (li tap trò facile){" "}
+                </span>
+              )}{" "}
+            </DialogDescription>{" "}
+          </DialogHeader>{" "}
+          <DialogFooter>
+            {" "}
+            <Button
+              variant="outline"
+              onClick={() => {
+                setOpenConfirmPopupDestroy(false);
+                setPassDeleteOk(false);
+                setPassDelete("");
+              }}
+            >
+              {" "}
+              Non, Fermer{" "}
+            </Button>{" "}
+            <Button
+              variant="destructive"
+              disabled={!passDeleteOk}
+              onClick={() => {
+                if (selectedDoc)
+                  termitatePlan(
+                    selectedDoc.id,
+                    `${selectedDoc.Nom} ${selectedDoc.Prenom}`
+                  );
+                setOpenConfirmPopupDestroy(false);
+                setPassDeleteOk(false);
+                setPassDelete("");
+              }}
+            >
+              {" "}
+              Oui, Detruire{" "}
+            </Button>{" "}
+          </DialogFooter>{" "}
+        </DialogContent>{" "}
       </Dialog>
     </>
   );

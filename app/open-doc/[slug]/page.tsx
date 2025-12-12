@@ -42,6 +42,7 @@ interface FormData {
   Balance: string;
   TotalBalance: string;
   Historic: string;
+  Detruit: string;
 }
 
 export default function PDFGenerator({
@@ -133,6 +134,7 @@ export default function PDFGenerator({
       alert(`Vous avez ajouté: ${amount} $ a votre balance!`);
       setAmount("");
       setOpenAdd(false);
+      window.location.reload();
     } catch (err) {
       console.error("Erreur ajout fund:", err);
     } finally {
@@ -166,6 +168,7 @@ export default function PDFGenerator({
         setAmount("");
         setOpenRemove(false);
         alert(`Vous avez retirer: ${amount} $ de votre balance!`);
+        window.location.reload();
       } catch (err) {
         console.error("Erreur retrait fond:", err);
       } finally {
@@ -242,7 +245,8 @@ export default function PDFGenerator({
       {/* Section informations */}
       <div className="bg-gray-50 p-6 mt-8 rounded-lg border">
         <h2 className="text-lg font-bold mb-4 text-gray-700 text-center">
-          Informations client & compte
+          Informations client & compte (Detruit? :{" "}
+          <span className="font-bold">{form?.Detruit}</span>)
         </h2>
         <div className="bg-gray-50 p-6 mt-8 rounded-lg border">
           <div className="grid grid-cols-2 md:grid-cols-3 gap-4 text-sm text-gray-800">
