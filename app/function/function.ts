@@ -1,3 +1,21 @@
+import { doc, setDoc } from "firebase/firestore";
+import { db } from "../firebase/config";
+
+interface FormData {
+  id: string;
+  Nom: string;
+  Prenom: string;
+  StartDate: string;
+  EndDate: string;
+  NIF: string;
+  Phone: string;
+  Plan: number | string;
+  DailyMoney: string;
+  Balance: string;
+  TotalBalance: string;
+  Historic: string;
+  Detruit?: string;
+}
 export function formatReadableDate(iso: string): string {
   const date = new Date(iso);
 
@@ -92,4 +110,33 @@ export function appendDataRepeated(
 
   // Concatène simplement la nouvelle donnée à la chaîne existante
   return initialData ? initialData + entry : entry;
+}
+
+export async function addAllDocs(data: FormData[]) {
+  try {
+    for (const form of data) {
+      const ref = doc(db, "doc", form.id);
+
+      await setDoc(ref, {
+        Nom: form.Nom || "",
+        Prenom: form.Prenom || "",
+        StartDate: form.StartDate || "",
+        EndDate: form.EndDate || "",
+        NIF: form.NIF || "",
+        Phone: form.Phone || "",
+        Plan: form.Plan || 0,
+        DailyMoney: form.DailyMoney || "0",
+        Balance: form.Balance || "0",
+        TotalBalance: form.TotalBalance || "0",
+        Historic: form.Historic || "",
+        Detruit: form.Detruit || "non",
+      });
+
+      console.log(`✅ Added doc ${form.id}`);
+    }
+
+    console.log("🎉 All documents added!");
+  } catch (err) {
+    console.error("❌ Error adding documents:", err);
+  }
 }

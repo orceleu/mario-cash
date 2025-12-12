@@ -288,7 +288,7 @@ export default function PDFGenerator({
         </div>
         <div className="bg-white p-4 rounded-lg border  mt-6 space-y-4">
           <p className="text-lg font-semibold text-center">
-            Balance actuelle : {form.Balance} $ht / {form.TotalBalance} $ht
+            Solde : {form.Balance} $ht / {form.TotalBalance} $ht
           </p>
           <div className="flex justify-center">
             <div>
