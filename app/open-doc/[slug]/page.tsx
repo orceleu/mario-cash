@@ -58,13 +58,15 @@ export default function PDFGenerator({
   const [loadingAdd, setLoadingAdd] = useState(false);
   const [loadingRemove, setLoadingRemove] = useState(false);
   const [errorLimit, setErrorLimit] = useState("");
+  const [errorLimitRemove, setErrorLimitRemove] = useState("");
+
   const [openAdd, setOpenAdd] = useState(false);
   const [openRemove, setOpenRemove] = useState(false);
   const [passDelete, setPassDelete] = useState("");
   const [passDeleteOk, setPassDeleteOk] = useState(false);
   const [user, setUser] = useState<User | null>(null);
 
-  const stringRef = useRef<string>(""); // initialisé vide
+  const stringRef = useRef<string>("");
   useEffect(() => {
     if (passDelete === PASS_DELETE) {
       setPassDeleteOk(true);
@@ -74,35 +76,35 @@ export default function PDFGenerator({
   }, [passDelete]);
   const appendString = (initial: string, add: string) => {
     if (!stringRef.current) {
-      stringRef.current = initial; // si vide, initialise avec initial
+      stringRef.current = initial;
     }
-    stringRef.current += add; // ajoute la nouvelle valeur
+    stringRef.current += add;
     return stringRef.current;
   };
 
   function validateAmount(value: string) {
     setAmount(value);
     setErrorLimit("");
+    setErrorLimitRemove("");
 
     const numeric = Number(value);
     const current = Number(form?.Balance ?? 0);
     const total = Number(form?.TotalBalance ?? 0);
 
-    if (numeric < 0) {
+    if (Number.isNaN(numeric) || numeric < 0) {
       setErrorLimit("Le montant ne peut pas être négatif.");
       return;
     }
 
-    // Limite pour AJOUT
     if (current + numeric > total) {
       setErrorLimit("Ajouter ce montant dépasserait la limite totale.");
-      return;
     }
 
-    // Limite pour RETRAIT
-    /* if (current - numeric < 0) {
-      setErrorLimit("Impossible de retirer plus que la balance actuelle.");
-    }*/
+    if (numeric > current) {
+      setErrorLimitRemove(
+        "Impossible de retirer plus que la balance actuelle."
+      );
+    }
   }
 
   async function addFunds() {
@@ -114,7 +116,7 @@ export default function PDFGenerator({
 
     try {
       const ref = doc(db, "doc", form.id);
-      //actualise les deux propriete dans la base : historic et balance
+
       await updateDoc(ref, {
         Balance: String(newValue),
         Historic: appendString(
@@ -142,7 +144,7 @@ export default function PDFGenerator({
     }
   }
   async function removeFunds() {
-    if (!form || errorLimit) return;
+    if (!form || errorLimitRemove) return;
     setPassDeleteOk(false);
     setPassDelete("");
     if (Number(form?.Balance ?? 0) - Number(amount) < 0) {
@@ -348,7 +350,9 @@ export default function PDFGenerator({
           </div>
 
           {errorLimit && (
-            <p className="text-red-600 text-sm text-center">{errorLimit}</p>
+            <p className="text-red-600 text-sm text-center">
+              {errorLimit} {errorLimitRemove}
+            </p>
           )}
           <div className="flex justify-center">
             <div className="flex items-center gap-3 mt-3">
@@ -412,7 +416,7 @@ export default function PDFGenerator({
                 <DialogTrigger asChild>
                   <Button
                     variant="destructive"
-                    disabled={!amount || !!errorLimit}
+                    disabled={!amount || !!errorLimitRemove}
                   >
                     Retirer des fonds
                   </Button>
@@ -454,7 +458,9 @@ export default function PDFGenerator({
 
                     <Button
                       onClick={removeFunds}
-                      disabled={loadingRemove || !!errorLimit || !passDeleteOk}
+                      disabled={
+                        loadingRemove || !!errorLimitRemove || !passDeleteOk
+                      }
                     >
                       {loadingRemove ? "Chargement..." : "Confirmer"}
                     </Button>
@@ -468,9 +474,7 @@ export default function PDFGenerator({
           transactions
         </p>
         <p className="text-gray-700 text-center my-4">
-          NB: 1-Les retraits ne sont pas prise en compte pour les jours payés.
-          (pa gen fè back). 2- Veuillez actualiser la page pour afficher les
-          donnees recentes.
+          Historique des transactions.
         </p>
         <div className="h-1 bg-gray-700"></div>
         <ScrollArea className="w-full h-[600px]">

@@ -45,6 +45,12 @@ export default function LockerTable({ plan, data }: Props) {
       0
     );
   }, [parsed]);
+  const totalDaysRetr = useMemo(() => {
+    return Object.values(parsed).reduce(
+      (acc, row) => acc + (row.action == "retr" ? row.days : 0),
+      0
+    );
+  }, [parsed]);
 
   const totalColor =
     totalDays < 10
@@ -72,7 +78,7 @@ export default function LockerTable({ plan, data }: Props) {
             const row = parsed[id];
 
             // Bleu si paid (# dépend du nombre de jours)
-            const isPaid = id <= totalDays;
+            const isPaid = id <= totalDays - totalDaysRetr;
             const paidColor = isPaid
               ? "bg-green-600 text-white"
               : "bg-gray-300 text-black";
@@ -112,7 +118,7 @@ export default function LockerTable({ plan, data }: Props) {
       <div className="mt-4 font-semibold">
         Total des jours payés :{" "}
         <span className={totalColor}>
-          {totalDays}/{plan}
+          {totalDays - totalDaysRetr}/{plan}
         </span>
       </div>
     </div>
