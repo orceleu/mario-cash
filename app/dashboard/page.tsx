@@ -436,36 +436,52 @@ export default function Dashboard() {
         </div>
 
         {show && (
-          <div className="mb-10 p-4 border rounded-lg shadow bg-white">
-            <div className="flex justify-between">
-              <div>
-                <p className="text-lg font-bold text-gray-700">
-                  Total Global :
+          <div className="mb-10 p-5 border rounded-2xl shadow-sm bg-white">
+            <div className="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
+              {/* Total */}
+              <div className="min-w-[150px]">
+                <p className="text-sm text-gray-500">Total Global</p>
+                <p className="text-xl font-semibold text-gray-800">
+                  {totalBalanceSum}$ht
                 </p>
-                <p className="text-gray-700 text-md">
-                  {totalBalanceSum}$ht / {totalExpectedSum}$ht
-                </p>
+                <p className="text-sm text-gray-500">/ {totalExpectedSum}$ht</p>
               </div>
 
-              <div>
-                <p className="text-center text-sm font-bold">%</p>
+              {/* Percent */}
+              <div className="flex flex-col lg:items-center min-w-[120px]">
+                <p className="text-sm text-gray-500 mb-1">Pourcentage</p>
+
                 <Input
                   type="number"
                   value={percent}
                   onChange={(e) => setPercent(e.target.value)}
                   placeholder="%"
+                  className="w-full lg:w-24 text-center"
                 />
-                <p className="text-center">
-                  {(Number(percent) * totalExpectedSum) / 100} $ht
+
+                <p className="mt-2 text-sm text-gray-700">
+                  {((Number(percent) * totalExpectedSum) / 100).toFixed(2)} $ht
                 </p>
               </div>
 
-              <p className="font-bold text-green-500">
-                Détruits : {destroyedCount} : (
-                {(totaldetruit * Number(percent)) / 100} $ht)
-              </p>
+              {/* Destroyed */}
+              <div className="min-w-[150px]">
+                <p className="text-sm text-gray-500">Détruits</p>
+                <p className="text-lg font-semibold text-green-600">
+                  {destroyedCount}
+                </p>
+                <p className="text-sm text-gray-500">
+                  ({((totaldetruit * Number(percent)) / 100).toFixed(2)} $ht)
+                </p>
+              </div>
 
-              <p className="font-bold">{filteredData.length} Clients</p>
+              {/* Clients */}
+              <div className="min-w-[120px] text-left lg:text-right">
+                <p className="text-sm text-gray-500">Clients</p>
+                <p className="text-lg font-semibold text-gray-800">
+                  {filteredData.length}
+                </p>
+              </div>
             </div>
           </div>
         )}
