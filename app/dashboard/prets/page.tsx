@@ -16,6 +16,7 @@ import {
   collection,
   addDoc,
   getDocs,
+  getDoc,
   deleteDoc,
   doc,
   updateDoc,
@@ -111,6 +112,13 @@ function PretsContent() {
   const [submitting, setSubmitting] = useState(false);
   const [globalTaux, setGlobalTaux] = useState("5");
   const [tauxSavedNotice, setTauxSavedNotice] = useState(false);
+
+  // Protection suppression (code de sécurité)
+  const [passDelete, setPassDelete] = useState("");
+  const [managerPassword, setManagerPassword] = useState("");
+  const [deleteError, setDeleteError] = useState("");
+  const [deleting, setDeleting] = useState(false);
+  const passDeleteOk = managerPassword !== "" && passDelete === managerPassword;
 
   // Client search and selection
   const [clientSearchQuery, setClientSearchQuery] = useState("");
@@ -226,9 +234,22 @@ function PretsContent() {
     }
   }
 
+  // 4. Charger le code de sécurité (même référence que le dashboard)
+  async function fetchManagerPassword() {
+    try {
+      const snap = await getDoc(doc(db, "user", "mikeisme5@gmail.com"));
+      if (snap.exists()) {
+        setManagerPassword(String(snap.data()?.password ?? ""));
+      }
+    } catch (e) {
+      console.error("Erreur lecture code de sécurité:", e);
+    }
+  }
+
   useEffect(() => {
     fetchPrets();
     fetchPlanClients();
+    fetchManagerPassword();
   }, []);
 
   // Check URL query parameters (e.g. redirected from dashboard / open-doc)
@@ -326,9 +347,29 @@ function PretsContent() {
     }
   }
 
+  function closeDeleteDialog() {
+    setOpenDelete(false);
+    setSelectedPret(null);
+    setPassDelete("");
+    setDeleteError("");
+  }
+
   async function handleDelete() {
     if (!selectedPret) return;
+    setDeleting(true);
+    setDeleteError("");
     try {
+      // Vérification fraîche du code avant toute suppression
+      const snap = await getDoc(doc(db, "user", "mikeisme5@gmail.com"));
+      const currentPassword = snap.exists()
+        ? String(snap.data()?.password ?? "")
+        : "";
+
+      if (!currentPassword || passDelete !== currentPassword) {
+        setDeleteError("Code de sécurité incorrect.");
+        return;
+      }
+
       await deleteDoc(doc(db, "prets", selectedPret.id));
       setPrets((prev) => prev.filter((p) => p.id !== selectedPret.id));
       addHistoryEntry({
@@ -336,9 +377,12 @@ function PretsContent() {
         description: `Prêt supprimé: ${selectedPret.nom} ${selectedPret.prenom}`,
         details: `Montant: ${selectedPret.montant}$`,
       });
+      closeDeleteDialog();
+    } catch (e) {
+      console.error("Erreur suppression prêt:", e);
+      setDeleteError("Erreur lors de la suppression. Réessaie.");
     } finally {
-      setOpenDelete(false);
-      setSelectedPret(null);
+      setDeleting(false);
     }
   }
 
@@ -779,6 +823,8 @@ function PretsContent() {
                     variant="ghost"
                     onClick={() => {
                       setSelectedPret(pret);
+                      setPassDelete("");
+                      setDeleteError("");
                       setOpenDelete(true);
                     }}
                     className="h-8 w-8 p-0 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg"
@@ -1154,8 +1200,13 @@ function PretsContent() {
         </DialogContent>
       </Dialog>
 
-      {/* Delete Dialog */}
-      <Dialog open={openDelete} onOpenChange={setOpenDelete}>
+      {/* Delete Dialog (protégé par code de sécurité) */}
+      <Dialog
+        open={openDelete}
+        onOpenChange={(open) => {
+          if (!open) closeDeleteDialog();
+        }}
+      >
         <DialogContent className="bg-white border border-slate-200 text-slate-900 max-w-md rounded-2xl shadow-xl">
           <DialogHeader>
             <DialogTitle className="text-slate-900 text-lg font-bold">
@@ -1166,23 +1217,61 @@ function PretsContent() {
               <strong className="text-slate-900">
                 {selectedPret?.nom} {selectedPret?.prenom}
               </strong>{" "}
-              d&apos;un montant de {selectedPret?.montant}$ ?
+              d&apos;un montant de {selectedPret?.montant}$ ? Cette action est
+              irréversible.
             </DialogDescription>
           </DialogHeader>
+
+          <div className="py-2 space-y-2">
+            <label className="text-xs font-semibold text-slate-700 block">
+              Entrez le code de sécurité pour autoriser :
+            </label>
+            <Input
+              type="password"
+              placeholder="Code de sécurité"
+              value={passDelete}
+              onChange={(e) => {
+                setPassDelete(e.target.value);
+                setDeleteError("");
+              }}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && passDeleteOk && !deleting)
+                  handleDelete();
+              }}
+              className="bg-slate-50 border-slate-200 text-slate-900"
+              autoFocus
+            />
+            {passDelete && (
+              <p
+                className={`text-xs font-semibold ${
+                  passDeleteOk ? "text-emerald-600" : "text-rose-600"
+                }`}
+              >
+                {passDeleteOk ? "✓ Suppression autorisée" : "⚠ Code requis"}
+              </p>
+            )}
+            {deleteError && (
+              <p className="text-xs font-semibold text-rose-600">
+                {deleteError}
+              </p>
+            )}
+          </div>
+
           <DialogFooter className="gap-2 sm:gap-0">
             <Button
               variant="outline"
-              onClick={() => setOpenDelete(false)}
+              onClick={closeDeleteDialog}
               className="border-slate-200 text-slate-600 hover:bg-slate-50"
             >
               Annuler
             </Button>
             <Button
               variant="destructive"
+              disabled={!passDeleteOk || deleting}
               onClick={handleDelete}
               className="bg-rose-600 hover:bg-rose-700 text-white font-semibold"
             >
-              Supprimer
+              {deleting ? "Suppression..." : "Supprimer"}
             </Button>
           </DialogFooter>
         </DialogContent>

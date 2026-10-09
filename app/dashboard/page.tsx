@@ -202,7 +202,7 @@ export default function Dashboard() {
   };
 
   const getCustomerdata = async () => {
-    const querySnapshot = await getDocs(collection(db, "doc"));
+    const querySnapshot = await getDocs(collection(db, "do"));
     const docs: DocumentsWithId[] = querySnapshot.docs.map((d) => ({
       id: d.id,
       ...d.data(),
