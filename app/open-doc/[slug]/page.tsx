@@ -32,17 +32,19 @@ import {
   PlusCircle,
   MinusCircle,
   CreditCard,
-  User,
   Calendar,
-  Phone,
   FileText,
   ShieldCheck,
   AlertCircle,
   HandCoins,
   CheckCircle2,
   Lock,
-  Percent,
   Sparkles,
+  Share2,
+  Copy,
+  Check,
+  Mail,
+  Send,
 } from "lucide-react";
 import { onAuthStateChanged, User as FirebaseUser } from "firebase/auth";
 import { addHistoryEntry } from "@/app/function/history";
@@ -64,6 +66,14 @@ interface FormData {
 }
 
 const STORAGE_KEY_TAUX = "mario_cash_taux_interet";
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+// Masque le NIF pour les visiteurs non connectés (ex: 12••••89)
+const maskValue = (value: string) => {
+  if (!value) return "—";
+  if (value.length <= 4) return "••••";
+  return `${value.slice(0, 2)}${"•".repeat(value.length - 4)}${value.slice(-2)}`;
+};
 
 export default function PDFGenerator({
   params,
@@ -85,12 +95,23 @@ export default function PDFGenerator({
   const [passDelete, setPassDelete] = useState("");
   const [passDeleteOk, setPassDeleteOk] = useState(false);
   const [user, setUser] = useState<FirebaseUser | null>(null);
+  const [authLoading, setAuthLoading] = useState(true);
   const password = useRef("");
+
+  // Partage
+  const [shareUrl, setShareUrl] = useState("");
+  const [copied, setCopied] = useState(false);
+  const [openShare, setOpenShare] = useState(false);
+  const [recipientEmail, setRecipientEmail] = useState("");
+  const [shareError, setShareError] = useState("");
 
   // Interest rate from localStorage
   const [storedTaux, setStoredTaux] = useState("5");
   const [loanSimMontant, setLoanSimMontant] = useState("10000");
   const [loanSimMois, setLoanSimMois] = useState("6");
+
+  // Le gestionnaire = utilisateur connecté (les visiteurs avec le lien sont en lecture seule)
+  const isManager = !!user && !authLoading;
 
   useEffect(() => {
     try {
@@ -100,6 +121,13 @@ export default function PDFGenerator({
       }
     } catch (e) {
       console.error("Erreur lecture localStorage:", e);
+    }
+  }, []);
+
+  // Lien public du carnet (sans paramètres de requête ni hash)
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      setShareUrl(`${window.location.origin}${window.location.pathname}`);
     }
   }, []);
 
@@ -163,7 +191,7 @@ export default function PDFGenerator({
   }
 
   async function addFunds() {
-    if (!form || errorLimit || !passDeleteOk) return;
+    if (!isManager || !form || errorLimit || !passDeleteOk) return;
     setLoadingAdd(true);
     const numericAmount = Number(amount);
     const newValue = Number(form.Balance) + numericAmount;
@@ -210,7 +238,7 @@ export default function PDFGenerator({
   }
 
   async function removeFunds() {
-    if (!form || errorLimitRemove || !passDeleteOk) return;
+    if (!isManager || !form || errorLimitRemove || !passDeleteOk) return;
     const numericAmount = Number(amount);
     if (Number(form?.Balance ?? 0) - numericAmount < 0) {
       setErrorLimitRemove(
@@ -263,6 +291,53 @@ export default function PDFGenerator({
     }
   }
 
+  // ---------- Partage ----------
+  async function copyLink() {
+    if (!shareUrl) return;
+    try {
+      await navigator.clipboard.writeText(shareUrl);
+    } catch {
+      // Fallback pour les navigateurs sans clipboard API
+      const textarea = document.createElement("textarea");
+      textarea.value = shareUrl;
+      document.body.appendChild(textarea);
+      textarea.select();
+      document.execCommand("copy");
+      document.body.removeChild(textarea);
+    }
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  }
+
+  function sendByGmail() {
+    if (!form || !user?.email) return;
+
+    const to = recipientEmail.trim();
+    if (!EMAIL_REGEX.test(to)) {
+      setShareError("Veuillez entrer une adresse email valide.");
+      return;
+    }
+    setShareError("");
+
+    const subject = `Votre carnet d'épargne Mario Cash - ${form.Nom} ${form.Prenom}`;
+    const body =
+      `Bonjour,\n\n` +
+      `Vous pouvez consulter votre solde et les détails de votre carnet d'épargne via le lien ci-dessous :\n\n` +
+      `${shareUrl}\n\n` +
+      `Cordialement,\nMario Cash`;
+
+    const gmailUrl =
+      `https://mail.google.com/mail/?authuser=${encodeURIComponent(user.email)}` +
+      `&view=cm&fs=1` +
+      `&to=${encodeURIComponent(to)}` +
+      `&su=${encodeURIComponent(subject)}` +
+      `&body=${encodeURIComponent(body)}`;
+
+    window.open(gmailUrl, "_blank", "noopener,noreferrer");
+    setOpenShare(false);
+    setRecipientEmail("");
+  }
+
   useEffect(() => {
     const fetchForm = async () => {
       docKey.current = (await params).slug;
@@ -289,6 +364,7 @@ export default function PDFGenerator({
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
       setUser(currentUser);
+      setAuthLoading(false);
       if (currentUser?.email) {
         getCustomerdata(currentUser.email);
       }
@@ -313,12 +389,26 @@ export default function PDFGenerator({
     return d > 0 ? simTotalDu / d : 0;
   }, [simTotalDu, loanSimMois]);
 
-  if (loading || !form) {
+  if (loading) {
     return (
       <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center p-4">
         <LoaderIcon className="w-8 h-8 text-violet-600 animate-spin mb-3" />
         <p className="text-slate-500 text-sm font-medium">
           Chargement du carnet client...
+        </p>
+      </div>
+    );
+  }
+
+  if (!form) {
+    return (
+      <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center p-4 text-center">
+        <AlertCircle className="w-8 h-8 text-rose-500 mb-3" />
+        <p className="text-slate-700 text-sm font-semibold">
+          Carnet introuvable ou lien invalide.
+        </p>
+        <p className="text-slate-500 text-xs mt-1">
+          Vérifiez le lien reçu ou contactez votre gestionnaire.
         </p>
       </div>
     );
@@ -337,15 +427,21 @@ export default function PDFGenerator({
       <div className="max-w-4xl mx-auto space-y-6">
         {/* Navigation & Action Bar */}
         <div className="flex flex-wrap items-center justify-between gap-3 bg-white p-4 rounded-2xl border border-slate-200 shadow-xs print:hidden">
-          <Link
-            href="/dashboard"
-            className="inline-flex items-center gap-2 text-xs font-semibold text-slate-600 hover:text-slate-900 bg-slate-50 hover:bg-slate-100 px-3 py-2 rounded-xl transition-colors border border-slate-200"
-          >
-            <ArrowLeft className="w-4 h-4" />
-            Retour au Tableau de Bord
-          </Link>
+          {isManager ? (
+            <Link
+              href="/dashboard"
+              className="inline-flex items-center gap-2 text-xs font-semibold text-slate-600 hover:text-slate-900 bg-slate-50 hover:bg-slate-100 px-3 py-2 rounded-xl transition-colors border border-slate-200"
+            >
+              <ArrowLeft className="w-4 h-4" />
+              Retour au Tableau de Bord
+            </Link>
+          ) : (
+            <span className="text-xs font-semibold text-slate-500">
+              Consultation de votre carnet (lecture seule)
+            </span>
+          )}
 
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <span
               className={`text-xs font-semibold px-3 py-1 rounded-full border ${
                 isDestroyed
@@ -355,6 +451,137 @@ export default function PDFGenerator({
             >
               {isDestroyed ? "Carnet Clôturé / Détruit" : "Carnet Actif"}
             </span>
+
+            {/* Boutons de partage : réservés au gestionnaire connecté */}
+            {isManager && (
+              <>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={copyLink}
+                  className="text-xs font-semibold text-slate-700 border-slate-200 gap-1.5 rounded-xl h-9"
+                >
+                  {copied ? (
+                    <>
+                      <Check className="w-3.5 h-3.5 text-emerald-600" />
+                      Lien copié !
+                    </>
+                  ) : (
+                    <>
+                      <Copy className="w-3.5 h-3.5" />
+                      Copier le lien
+                    </>
+                  )}
+                </Button>
+
+                <Dialog
+                  open={openShare}
+                  onOpenChange={(v) => {
+                    setOpenShare(v);
+                    if (!v) setShareError("");
+                  }}
+                >
+                  <DialogTrigger asChild>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="text-xs font-semibold text-violet-700 border-violet-200 bg-violet-50 hover:bg-violet-100 gap-1.5 rounded-xl h-9"
+                    >
+                      <Share2 className="w-3.5 h-3.5" />
+                      Partager par email
+                    </Button>
+                  </DialogTrigger>
+
+                  <DialogContent className="bg-white border border-slate-200 text-slate-900 max-w-md rounded-2xl shadow-xl">
+                    <DialogHeader>
+                      <DialogTitle className="text-slate-900 text-lg font-bold flex items-center gap-2">
+                        <Mail className="w-5 h-5 text-violet-600" />
+                        Partager le carnet par email
+                      </DialogTitle>
+                      <DialogDescription className="text-slate-500 text-xs">
+                        Le carnet de{" "}
+                        <strong>
+                          {form.Nom} {form.Prenom}
+                        </strong>{" "}
+                        sera envoyé via Gmail.
+                      </DialogDescription>
+                    </DialogHeader>
+
+                    <div className="py-3 space-y-4">
+                      <div>
+                        <label className="text-xs font-semibold text-slate-700 mb-1 block">
+                          De (expéditeur)
+                        </label>
+                        <Input
+                          type="email"
+                          value={user?.email ?? ""}
+                          readOnly
+                          disabled
+                          className="bg-slate-100 border-slate-200 text-slate-600"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="text-xs font-semibold text-slate-700 mb-1 block">
+                          À (destinataire)
+                        </label>
+                        <Input
+                          type="email"
+                          placeholder="exemple@gmail.com"
+                          value={recipientEmail}
+                          onChange={(e) => {
+                            setRecipientEmail(e.target.value);
+                            setShareError("");
+                          }}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") sendByGmail();
+                          }}
+                          className="bg-slate-50 border-slate-200 text-slate-900"
+                          autoFocus
+                        />
+                        {shareError && (
+                          <p className="text-rose-600 text-xs font-medium mt-1.5 flex items-center gap-1">
+                            <AlertCircle className="w-3.5 h-3.5" />
+                            {shareError}
+                          </p>
+                        )}
+                      </div>
+
+                      <div className="bg-slate-50 border border-slate-200 rounded-xl p-3">
+                        <span className="text-[11px] font-medium text-slate-500 block mb-0.5">
+                          Lien partagé
+                        </span>
+                        <p className="text-xs font-mono text-slate-700 break-all">
+                          {shareUrl}
+                        </p>
+                      </div>
+                    </div>
+
+                    <DialogFooter className="gap-2 sm:gap-0">
+                      <Button
+                        variant="outline"
+                        onClick={() => {
+                          setOpenShare(false);
+                          setRecipientEmail("");
+                          setShareError("");
+                        }}
+                        className="border-slate-200 text-slate-600 hover:bg-slate-50"
+                      >
+                        Annuler
+                      </Button>
+                      <Button
+                        onClick={sendByGmail}
+                        disabled={!recipientEmail.trim()}
+                        className="bg-violet-600 hover:bg-violet-700 text-white font-semibold gap-1.5"
+                      >
+                        <Send className="w-4 h-4" />
+                        Ouvrir Gmail
+                      </Button>
+                    </DialogFooter>
+                  </DialogContent>
+                </Dialog>
+              </>
+            )}
 
             <Button
               variant="outline"
@@ -445,7 +672,7 @@ export default function PDFGenerator({
                     NIF / CIN
                   </span>
                   <p className="text-sm font-bold text-slate-900 truncate font-mono">
-                    {form.NIF || "—"}
+                    {isManager ? form.NIF || "—" : maskValue(form.NIF)}
                   </p>
                 </div>
 
@@ -557,8 +784,8 @@ export default function PDFGenerator({
               </div>
             </div>
 
-            {/* Operations & Quick Actions (Hidden in Print) */}
-            {!isDestroyed && (
+            {/* Operations & Quick Actions (gestionnaire connecté uniquement) */}
+            {isManager && !isDestroyed && (
               <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-xs space-y-4 print:hidden">
                 <h3 className="text-xs font-bold text-slate-600 uppercase tracking-wider">
                   Effectuer un Dépôt ou un Retrait
@@ -791,87 +1018,89 @@ export default function PDFGenerator({
               </div>
             )}
 
-            {/* SECTION: Proposition de Prêt & Simulation avec Taux localStorage */}
-            <div className="bg-violet-50/60 border border-violet-200 rounded-2xl p-5 shadow-xs space-y-3 print:hidden">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                <div className="flex items-center gap-2">
-                  <div className="w-8 h-8 rounded-lg bg-violet-100 text-violet-700 flex items-center justify-center">
-                    <HandCoins className="w-4 h-4" />
+            {/* SECTION: Prêt & Simulation (gestionnaire connecté uniquement) */}
+            {isManager && (
+              <div className="bg-violet-50/60 border border-violet-200 rounded-2xl p-5 shadow-xs space-y-3 print:hidden">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <div className="w-8 h-8 rounded-lg bg-violet-100 text-violet-700 flex items-center justify-center">
+                      <HandCoins className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <h3 className="text-sm font-bold text-violet-900">
+                        Option de Prêt pour {form.Nom} {form.Prenom}
+                      </h3>
+                      <p className="text-xs text-violet-600">
+                        Taux d&apos;intérêt configuré :{" "}
+                        <strong>{storedTaux}%</strong> (enregistré dans vos
+                        paramètres)
+                      </p>
+                    </div>
+                  </div>
+
+                  <Button
+                    onClick={() => {
+                      const url = `/dashboard/prets?clientId=${form.id}&nom=${encodeURIComponent(
+                        form.Nom,
+                      )}&prenom=${encodeURIComponent(
+                        form.Prenom,
+                      )}&phone=${encodeURIComponent(
+                        form.Phone || "",
+                      )}&nif=${encodeURIComponent(
+                        form.NIF || "",
+                      )}&montant=${loanSimMontant}`;
+                      router.push(url);
+                    }}
+                    className="bg-violet-600 hover:bg-violet-700 text-white font-semibold text-xs rounded-xl h-9 gap-1.5 shadow-xs"
+                  >
+                    <Sparkles className="w-3.5 h-3.5" />
+                    Accorder un prêt à ce client
+                  </Button>
+                </div>
+
+                {/* Mini simulation preview */}
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 pt-2 border-t border-violet-200/80 text-xs">
+                  <div>
+                    <label className="text-[11px] text-slate-500 block mb-0.5">
+                      Montant ($)
+                    </label>
+                    <Input
+                      type="number"
+                      value={loanSimMontant}
+                      onChange={(e) => setLoanSimMontant(e.target.value)}
+                      className="h-8 bg-white border-slate-200 text-xs font-bold text-slate-900 rounded-lg"
+                    />
                   </div>
                   <div>
-                    <h3 className="text-sm font-bold text-violet-900">
-                      Option de Prêt pour {form.Nom} {form.Prenom}
-                    </h3>
-                    <p className="text-xs text-violet-600">
-                      Taux d&apos;intérêt configuré :{" "}
-                      <strong>{storedTaux}%</strong> (enregistré dans vos
-                      paramètres)
-                    </p>
+                    <label className="text-[11px] text-slate-500 block mb-0.5">
+                      Durée (mois)
+                    </label>
+                    <Input
+                      type="number"
+                      value={loanSimMois}
+                      onChange={(e) => setLoanSimMois(e.target.value)}
+                      className="h-8 bg-white border-slate-200 text-xs font-bold text-slate-900 rounded-lg"
+                    />
+                  </div>
+                  <div className="bg-white p-2 rounded-lg border border-violet-100 flex flex-col justify-center">
+                    <span className="text-[10px] text-slate-400 block uppercase font-medium">
+                      Intérêts ({storedTaux}%)
+                    </span>
+                    <span className="font-bold text-amber-600">
+                      {simTotalInterest.toFixed(2)}$
+                    </span>
+                  </div>
+                  <div className="bg-white p-2 rounded-lg border border-violet-100 flex flex-col justify-center">
+                    <span className="text-[10px] text-slate-400 block uppercase font-medium">
+                      Mensualité
+                    </span>
+                    <span className="font-bold text-emerald-700">
+                      {simMensualite.toFixed(2)}$ / m
+                    </span>
                   </div>
                 </div>
-
-                <Button
-                  onClick={() => {
-                    const url = `/dashboard/prets?clientId=${form.id}&nom=${encodeURIComponent(
-                      form.Nom,
-                    )}&prenom=${encodeURIComponent(
-                      form.Prenom,
-                    )}&phone=${encodeURIComponent(
-                      form.Phone || "",
-                    )}&nif=${encodeURIComponent(
-                      form.NIF || "",
-                    )}&montant=${loanSimMontant}`;
-                    router.push(url);
-                  }}
-                  className="bg-violet-600 hover:bg-violet-700 text-white font-semibold text-xs rounded-xl h-9 gap-1.5 shadow-xs"
-                >
-                  <Sparkles className="w-3.5 h-3.5" />
-                  Accorder un prêt à ce client
-                </Button>
               </div>
-
-              {/* Mini simulation preview */}
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 pt-2 border-t border-violet-200/80 text-xs">
-                <div>
-                  <label className="text-[11px] text-slate-500 block mb-0.5">
-                    Montant ($)
-                  </label>
-                  <Input
-                    type="number"
-                    value={loanSimMontant}
-                    onChange={(e) => setLoanSimMontant(e.target.value)}
-                    className="h-8 bg-white border-slate-200 text-xs font-bold text-slate-900 rounded-lg"
-                  />
-                </div>
-                <div>
-                  <label className="text-[11px] text-slate-500 block mb-0.5">
-                    Durée (mois)
-                  </label>
-                  <Input
-                    type="number"
-                    value={loanSimMois}
-                    onChange={(e) => setLoanSimMois(e.target.value)}
-                    className="h-8 bg-white border-slate-200 text-xs font-bold text-slate-900 rounded-lg"
-                  />
-                </div>
-                <div className="bg-white p-2 rounded-lg border border-violet-100 flex flex-col justify-center">
-                  <span className="text-[10px] text-slate-400 block uppercase font-medium">
-                    Intérêts ({storedTaux}%)
-                  </span>
-                  <span className="font-bold text-amber-600">
-                    {simTotalInterest.toFixed(2)}$
-                  </span>
-                </div>
-                <div className="bg-white p-2 rounded-lg border border-violet-100 flex flex-col justify-center">
-                  <span className="text-[10px] text-slate-400 block uppercase font-medium">
-                    Mensualité
-                  </span>
-                  <span className="font-bold text-emerald-700">
-                    {simMensualite.toFixed(2)}$ / m
-                  </span>
-                </div>
-              </div>
-            </div>
+            )}
 
             {/* Transactions History Table */}
             <div className="space-y-3 pt-2">
