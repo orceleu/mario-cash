@@ -45,6 +45,7 @@ import {
   Check,
   Mail,
   Send,
+  MessageCircle,
 } from "lucide-react";
 import { onAuthStateChanged, User as FirebaseUser } from "firebase/auth";
 import { addHistoryEntry } from "@/app/function/history";
@@ -66,13 +67,29 @@ interface FormData {
 }
 
 const STORAGE_KEY_TAUX = "mario_cash_taux_interet";
+const STORAGE_KEY_WA_SENDER = "mario_cash_whatsapp_sender";
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const DEFAULT_COUNTRY_CODE = "509"; // Haïti
 
 // Masque le NIF pour les visiteurs non connectés (ex: 12••••89)
 const maskValue = (value: string) => {
   if (!value) return "—";
   if (value.length <= 4) return "••••";
   return `${value.slice(0, 2)}${"•".repeat(value.length - 4)}${value.slice(-2)}`;
+};
+
+// Normalise un numéro au format international sans "+" (requis par wa.me)
+// Ex: "3712-3456" -> "50937123456" | "+1 305 555 1234" -> "13055551234"
+const normalizePhone = (raw: string) => {
+  let digits = (raw || "").replace(/\D/g, "");
+  if (digits.startsWith("00")) digits = digits.slice(2);
+  if (digits.length === 8) digits = DEFAULT_COUNTRY_CODE + digits;
+  return digits;
+};
+
+const isValidWaNumber = (raw: string) => {
+  const n = normalizePhone(raw);
+  return n.length >= 10 && n.length <= 15;
 };
 
 export default function PDFGenerator({
@@ -98,12 +115,20 @@ export default function PDFGenerator({
   const [authLoading, setAuthLoading] = useState(true);
   const password = useRef("");
 
-  // Partage
+  // Partage (commun + email)
   const [shareUrl, setShareUrl] = useState("");
   const [copied, setCopied] = useState(false);
   const [openShare, setOpenShare] = useState(false);
   const [recipientEmail, setRecipientEmail] = useState("");
   const [shareError, setShareError] = useState("");
+
+  // Partage WhatsApp
+  const [openWa, setOpenWa] = useState(false);
+  const [waSender, setWaSender] = useState("");
+  const [waRecipient, setWaRecipient] = useState("");
+  const [waRememberSender, setWaRememberSender] = useState(true);
+  const [waAutofilled, setWaAutofilled] = useState(false);
+  const [waError, setWaError] = useState("");
 
   // Interest rate from localStorage
   const [storedTaux, setStoredTaux] = useState("5");
@@ -338,6 +363,76 @@ export default function PDFGenerator({
     setRecipientEmail("");
   }
 
+  // ---------- Partage WhatsApp ----------
+  function handleWaOpenChange(open: boolean) {
+    setOpenWa(open);
+    setWaError("");
+
+    if (open && form) {
+      // Numéro émetteur mémorisé
+      let savedSender = "";
+      try {
+        savedSender = localStorage.getItem(STORAGE_KEY_WA_SENDER) || "";
+      } catch (e) {
+        console.error("Erreur lecture localStorage:", e);
+      }
+      setWaSender(savedSender);
+      setWaRememberSender(true);
+
+      // Autofill du destinataire avec le numéro de l'épargnant s'il existe
+      const clientPhone = (form.Phone || "").trim();
+      setWaRecipient(clientPhone);
+      setWaAutofilled(!!clientPhone);
+    }
+  }
+
+  function forgetSenderNumber() {
+    try {
+      localStorage.removeItem(STORAGE_KEY_WA_SENDER);
+    } catch (e) {
+      console.error("Erreur suppression localStorage:", e);
+    }
+    setWaSender("");
+  }
+
+  function sendByWhatsApp() {
+    if (!form) return;
+
+    if (!isValidWaNumber(waRecipient)) {
+      setWaError(
+        "Numéro du destinataire invalide. Ex : 3712-3456 ou +1 305 555 1234.",
+      );
+      return;
+    }
+    if (waSender.trim() && !isValidWaNumber(waSender)) {
+      setWaError("Votre numéro (émetteur) est invalide.");
+      return;
+    }
+    setWaError("");
+
+    // Sauvegarde du numéro émetteur
+    if (waRememberSender && waSender.trim()) {
+      try {
+        localStorage.setItem(STORAGE_KEY_WA_SENDER, waSender.trim());
+      } catch (e) {
+        console.error("Erreur écriture localStorage:", e);
+      }
+    }
+
+    const message =
+      `Bonjour ${form.Prenom},\n\n` +
+      `Vous pouvez consulter votre solde et les détails de votre carnet d'épargne Mario Cash via le lien ci-dessous :\n\n` +
+      `${shareUrl}\n\n` +
+      `Cordialement,\nMario Cash` +
+      (waSender.trim() ? `\nTél : ${waSender.trim()}` : "");
+
+    const waUrl = `https://wa.me/${normalizePhone(waRecipient)}?text=${encodeURIComponent(message)}`;
+
+    window.open(waUrl, "_blank", "noopener,noreferrer");
+    setOpenWa(false);
+    setWaRecipient("");
+  }
+
   useEffect(() => {
     const fetchForm = async () => {
       docKey.current = (await params).slug;
@@ -474,6 +569,7 @@ export default function PDFGenerator({
                   )}
                 </Button>
 
+                {/* Partage par email */}
                 <Dialog
                   open={openShare}
                   onOpenChange={(v) => {
@@ -576,6 +672,150 @@ export default function PDFGenerator({
                       >
                         <Send className="w-4 h-4" />
                         Ouvrir Gmail
+                      </Button>
+                    </DialogFooter>
+                  </DialogContent>
+                </Dialog>
+
+                {/* Partage par WhatsApp */}
+                <Dialog open={openWa} onOpenChange={handleWaOpenChange}>
+                  <DialogTrigger asChild>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="text-xs font-semibold text-emerald-700 border-emerald-200 bg-emerald-50 hover:bg-emerald-100 gap-1.5 rounded-xl h-9"
+                    >
+                      <MessageCircle className="w-3.5 h-3.5" />
+                      Partager par WhatsApp
+                    </Button>
+                  </DialogTrigger>
+
+                  <DialogContent className="bg-white border border-slate-200 text-slate-900 max-w-md rounded-2xl shadow-xl">
+                    <DialogHeader>
+                      <DialogTitle className="text-slate-900 text-lg font-bold flex items-center gap-2">
+                        <MessageCircle className="w-5 h-5 text-emerald-600" />
+                        Partager le carnet par WhatsApp
+                      </DialogTitle>
+                      <DialogDescription className="text-slate-500 text-xs">
+                        Le carnet de{" "}
+                        <strong>
+                          {form.Nom} {form.Prenom}
+                        </strong>{" "}
+                        sera envoyé via WhatsApp.
+                      </DialogDescription>
+                    </DialogHeader>
+
+                    <div className="py-3 space-y-4">
+                      {/* Émetteur */}
+                      <div>
+                        <div className="flex items-center justify-between mb-1">
+                          <label className="text-xs font-semibold text-slate-700 block">
+                            De (votre numéro)
+                          </label>
+                          {waSender && (
+                            <button
+                              type="button"
+                              onClick={forgetSenderNumber}
+                              className="text-[11px] font-medium text-rose-600 hover:underline"
+                            >
+                              Oublier mon numéro
+                            </button>
+                          )}
+                        </div>
+                        <Input
+                          type="tel"
+                          placeholder="Ex : 3712-3456"
+                          value={waSender}
+                          onChange={(e) => {
+                            setWaSender(e.target.value);
+                            setWaError("");
+                          }}
+                          className="bg-slate-50 border-slate-200 text-slate-900"
+                        />
+                        <label className="mt-2 flex items-center gap-2 text-xs text-slate-600 cursor-pointer select-none">
+                          <input
+                            type="checkbox"
+                            checked={waRememberSender}
+                            onChange={(e) =>
+                              setWaRememberSender(e.target.checked)
+                            }
+                            className="h-3.5 w-3.5 accent-emerald-600"
+                          />
+                          Mémoriser mon numéro sur cet appareil
+                        </label>
+                      </div>
+
+                      {/* Destinataire */}
+                      <div>
+                        <label className="text-xs font-semibold text-slate-700 mb-1 block">
+                          À (destinataire)
+                        </label>
+                        <Input
+                          type="tel"
+                          placeholder="Ex : 3712-3456 ou +1 305 555 1234"
+                          value={waRecipient}
+                          onChange={(e) => {
+                            setWaRecipient(e.target.value);
+                            setWaAutofilled(false);
+                            setWaError("");
+                          }}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") sendByWhatsApp();
+                          }}
+                          className="bg-slate-50 border-slate-200 text-slate-900"
+                          autoFocus
+                        />
+                        {waAutofilled && (
+                          <p className="text-emerald-700 text-[11px] font-medium mt-1.5 flex items-center gap-1">
+                            <CheckCircle2 className="w-3.5 h-3.5" />
+                            Numéro de l&apos;épargnant pré-rempli (modifiable)
+                          </p>
+                        )}
+                        {!form.Phone && (
+                          <p className="text-slate-400 text-[11px] mt-1.5">
+                            Aucun numéro enregistré pour cet épargnant.
+                          </p>
+                        )}
+                        {waError && (
+                          <p className="text-rose-600 text-xs font-medium mt-1.5 flex items-center gap-1">
+                            <AlertCircle className="w-3.5 h-3.5" />
+                            {waError}
+                          </p>
+                        )}
+                        <p className="text-slate-400 text-[11px] mt-1.5">
+                          Un numéro à 8 chiffres est automatiquement complété
+                          avec l&apos;indicatif Haïti (+{DEFAULT_COUNTRY_CODE}).
+                        </p>
+                      </div>
+
+                      <div className="bg-slate-50 border border-slate-200 rounded-xl p-3">
+                        <span className="text-[11px] font-medium text-slate-500 block mb-0.5">
+                          Lien partagé
+                        </span>
+                        <p className="text-xs font-mono text-slate-700 break-all">
+                          {shareUrl}
+                        </p>
+                      </div>
+                    </div>
+
+                    <DialogFooter className="gap-2 sm:gap-0">
+                      <Button
+                        variant="outline"
+                        onClick={() => {
+                          setOpenWa(false);
+                          setWaError("");
+                        }}
+                        className="border-slate-200 text-slate-600 hover:bg-slate-50"
+                      >
+                        Annuler
+                      </Button>
+                      <Button
+                        onClick={sendByWhatsApp}
+                        disabled={!waRecipient.trim()}
+                        className="bg-emerald-600 hover:bg-emerald-700 text-white font-semibold gap-1.5"
+                      >
+                        <Send className="w-4 h-4" />
+                        Ouvrir WhatsApp
                       </Button>
                     </DialogFooter>
                   </DialogContent>
@@ -1113,12 +1353,11 @@ export default function PDFGenerator({
                   {form.Plan} cases / jours au total
                 </span>
               </div>
-
-              <ScrollArea className="w-full h-[520px] rounded-xl">
-                <div className="pr-3 pb-4">
+              <div className="w-full max-h-[520px] overflow-y-auto rounded-xl">
+                <div className="pb-4">
                   <LockerTable plan={Number(form.Plan)} data={form.Historic} />
                 </div>
-              </ScrollArea>
+              </div>
             </div>
           </div>
         </div>

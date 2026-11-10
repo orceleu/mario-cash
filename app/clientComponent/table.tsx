@@ -42,13 +42,13 @@ export default function LockerTable({ plan, data }: Props) {
   const totalDays = useMemo(() => {
     return Object.values(parsed).reduce(
       (acc, row) => acc + (row.action == "dep" ? row.days : 0),
-      0
+      0,
     );
   }, [parsed]);
   const totalDaysRetr = useMemo(() => {
     return Object.values(parsed).reduce(
       (acc, row) => acc + (row.action == "retr" ? row.days : 0),
-      0
+      0,
     );
   }, [parsed]);
 
@@ -56,19 +56,21 @@ export default function LockerTable({ plan, data }: Props) {
     totalDays < 10
       ? "text-red-600"
       : totalDays < 20
-      ? "text-yellow-600"
-      : "text-green-600";
+        ? "text-yellow-600"
+        : "text-green-600";
 
   return (
     <div className="w-full overflow-x-auto">
-      <table className="w-full border border-gray-300 rounded-md">
+      <table className="w-full min-w-[560px] border border-gray-300 rounded-md">
         <thead className="bg-gray-100 text-[10px] md:text-sm">
           <tr>
-            <th className="p-2 border">Jours payés</th>
-            <th className="p-2 border">Date</th>
-            <th className="p-2 border">Montant</th>
-            <th className="p-2 border">Jours crédités/déduits</th>
-            <th className="p-2 border">Action</th>
+            <th className="p-2 border whitespace-nowrap">Jours payés</th>
+            <th className="p-2 border whitespace-nowrap">Date</th>
+            <th className="p-2 border whitespace-nowrap">Montant</th>
+            <th className="p-2 border whitespace-nowrap">
+              Jours crédités/déduits
+            </th>
+            <th className="p-2 border whitespace-nowrap">Action</th>
           </tr>
         </thead>
 
@@ -92,21 +94,29 @@ export default function LockerTable({ plan, data }: Props) {
 
             return (
               <tr key={id} className="text-center text-[10px] md:text-sm">
-                <td className={`p-2 border font-semibold ${paidColor}`}>
+                <td
+                  className={`p-2 border font-semibold whitespace-nowrap ${paidColor}`}
+                >
                   {id}
                 </td>
 
-                <td className="p-2 border">
+                <td className="p-2 border whitespace-nowrap">
                   {row
                     ? formatReadableDate(getLocalISOWithoutSeconds(row.date))
                     : "-"}
                 </td>
 
-                <td className="p-2 border">{row ? row.amount + " $" : "-"}</td>
+                <td className="p-2 border whitespace-nowrap">
+                  {row ? row.amount + " $" : "-"}
+                </td>
 
-                <td className="p-2 border">{row ? row.days : "-"}</td>
+                <td className="p-2 border whitespace-nowrap">
+                  {row ? row.days : "-"}
+                </td>
 
-                <td className={`p-2 border font-bold ${actionColor}`}>
+                <td
+                  className={`p-2 border font-bold whitespace-nowrap ${actionColor}`}
+                >
                   {row ? (row.action === "dep" ? "Dépôt" : "Retrait") : "-"}
                 </td>
               </tr>
